@@ -1,0 +1,40 @@
+# Finance RAG API - Development Docker Compose
+#
+# Usage:
+#   docker-compose -f docker-compose.dev.yml up -d
+#
+# Features:
+#   - Hot reload enabled
+#   - Source code mounted for live editing
+#   - Debug logging
+
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: finance-rag-api-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - OLLAMA_API_URL=http://host.docker.internal:11434
+      - LLM_MODEL=llama3.2:latest
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Mount source code for hot reload
+      - ./src:/app/src:ro
+      - ./data:/app/data:ro
+      # Persist local database
+      - ./db:/app/db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - rag-network-dev
+    restart: "no"
+
+networks:
+  rag-network-dev:
+    driver: bridge

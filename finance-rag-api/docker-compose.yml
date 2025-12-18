@@ -1,0 +1,92 @@
+# Finance RAG API - Docker Compose Configuration
+#
+# Usage:
+#   docker-compose up -d              # Start all services
+#   docker-compose up -d --build      # Rebuild and start
+#   docker-compose logs -f api        # View API logs
+#   docker-compose down               # Stop all services
+
+version: "3.9"
+
+services:
+  # ==========================================================================
+  # Finance RAG API Service
+  # ==========================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finance-rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - OLLAMA_API_URL=http://ollama:11434
+      - LLM_MODEL=llama3.2:latest
+      - CHROMA_DB_PATH=/app/db
+      - CHROMA_COLLECTION_NAME=finance_docs
+      - LOG_LEVEL=INFO
+    volumes:
+      # Persist vector database
+      - chromadb_data:/app/db
+      # Persist logs
+      - ./logs:/app/logs
+      # Mount sample documents (optional)
+      - ./data/sample_docs:/app/data/sample_docs:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - rag-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ==========================================================================
+  # Ollama LLM Service
+  # ==========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: finance-rag-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist downloaded models
+      - ollama_models:/root/.ollama
+    networks:
+      - rag-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # GPU support (uncomment if using NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  rag-network:
+    driver: bridge
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  chromadb_data:
+    driver: local
+  ollama_models:
+    driver: local
