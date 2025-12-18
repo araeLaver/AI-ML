@@ -2,24 +2,17 @@
 """
 RAG 서비스 모듈 - 핵심 비즈니스 로직
 
-[백엔드 개발자 관점]
-- Service Layer 패턴
-- 비즈니스 로직 캡슐화
-- 의존성 주입으로 테스트 용이
-
-[면접 포인트]
-Q: "RAG 시스템의 핵심 컴포넌트는?"
-A: "검색기(Retriever), 생성기(Generator), 프롬프트 엔지니어링입니다.
-    검색기는 벡터 DB로 관련 문서를 찾고,
-    생성기는 LLM으로 답변을 생성합니다.
-    프롬프트는 환각을 줄이는 핵심입니다."
+[설계 의도]
+- Service Layer 패턴으로 비즈니스 로직 캡슐화
+- LLM Provider 추상화로 로컬(Ollama)/클라우드(Groq) 전환 용이
+- 의존성 주입으로 테스트 및 확장 용이
 """
 
-import ollama
 from typing import Dict, Any, List, Optional, Generator
 from dataclasses import dataclass
 
 from .vectorstore import VectorStoreService
+from .llm_provider import get_llm_provider, LLMConfig, BaseLLMProvider
 
 
 @dataclass
@@ -64,14 +57,22 @@ class RAGService:
     def __init__(
         self,
         vectorstore: VectorStoreService,
-        llm_model: str = "llama3.2",
+        llm_model: str = "llama-3.1-8b-instant",
         top_k: int = 3,
-        temperature: float = 0.2
+        temperature: float = 0.2,
+        llm_provider: Optional[BaseLLMProvider] = None
     ):
         self.vectorstore = vectorstore
         self.llm_model = llm_model
         self.top_k = top_k
         self.temperature = temperature
+
+        # LLM Provider 설정 (Groq 우선, 없으면 Ollama)
+        if llm_provider:
+            self.llm = llm_provider
+        else:
+            config = LLMConfig(model=llm_model, temperature=temperature)
+            self.llm = get_llm_provider(config)
 
     def query(
         self,
@@ -136,16 +137,10 @@ class RAGService:
 [답변]"""
 
         # Step 4: LLM 답변 생성
-        response = ollama.chat(
-            model=self.llm_model,
-            messages=[
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            options={"temperature": self.temperature}
+        answer = self.llm.generate(
+            system_prompt=self.SYSTEM_PROMPT,
+            user_prompt=user_prompt
         )
-
-        answer = response.message.content
 
         # Step 5: 신뢰도 판단 (평균 유사도 기반)
         avg_relevance = sum(max(0, min(1, 1 - d / 2)) for d in distances) / len(distances)
@@ -263,19 +258,11 @@ class RAGService:
 [답변]"""
 
         # Step 4: LLM 스트리밍 답변 생성
-        stream = ollama.chat(
-            model=self.llm_model,
-            messages=[
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            options={"temperature": self.temperature},
-            stream=True
-        )
-
-        for chunk in stream:
-            if chunk.message.content:
-                yield {"type": "token", "content": chunk.message.content}
+        for token in self.llm.generate_stream(
+            system_prompt=self.SYSTEM_PROMPT,
+            user_prompt=user_prompt
+        ):
+            yield {"type": "token", "content": token}
 
         # Step 5: 신뢰도 계산 및 완료
         avg_relevance = sum(max(0, min(1, 1 - d / 2)) for d in distances) / len(distances)
