@@ -57,8 +57,8 @@ LLM이 금융 문서를 검색하여 **근거 있는 답변**을 생성하고, *
 
 ```bash
 # 저장소 클론
-git clone https://github.com/your-username/finance-rag-api.git
-cd finance-rag-api
+git clone https://github.com/araeLaver/AI-ML.git
+cd AI-ML/finance-rag-api
 
 # 가상환경 생성 및 활성화
 python -m venv venv
@@ -241,8 +241,7 @@ class RAGException(Exception):
 
 - [ ] JWT 기반 사용자 인증
 - [ ] Redis 기반 Rate Limiting
-- [ ] 스트리밍 응답 지원
-- [ ] 멀티 모델 지원 (GPT-4, Claude)
+- [ ] 멀티 모델 지원
 - [ ] 문서 버전 관리
 - [ ] 사용자별 문서 격리
 
@@ -253,5 +252,4 @@ MIT License
 ## 연락처
 
 - **개발자**: 김다운
-- **Email**: your-email@example.com
-- **GitHub**: https://github.com/your-username
+- **GitHub**: https://github.com/araeLaver
