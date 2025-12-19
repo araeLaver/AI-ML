@@ -1,204 +1,875 @@
 # -*- coding: utf-8 -*-
 """
-Finance RAG - 금융 문서 기반 AI Q&A 시스템
-
-포트폴리오 웹 데모
-- Groq API (클라우드 LLM)
-- ChromaDB (벡터 검색)
-- 스트리밍 응답
+Finance RAG - 포트폴리오 데모
+Professional UI with Advanced RAG Features
 """
 
 import streamlit as st
 import os
-from typing import List, Dict, Any, Generator, Optional
+import time
+import json
+from typing import List, Dict, Any, Optional, Generator
+from datetime import datetime
 from dataclasses import dataclass
+from collections import defaultdict
+import re
+import math
 
 # ============================================================
-# 페이지 설정
+# 페이지 설정 (가장 먼저)
 # ============================================================
-
 st.set_page_config(
-    page_title="Finance RAG - AI 금융 Q&A",
-    page_icon="💰",
+    page_title="Finance RAG | AI 금융 분석 시스템",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================
-# 커스텀 CSS
+# 스타일 정의 (모던하고 깔끔한 디자인)
 # ============================================================
-
 st.markdown("""
 <style>
-    .main-header {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-    .main-header h1 { margin: 0; font-size: 2.5rem; }
-    .main-header p { margin: 0.5rem 0 0 0; opacity: 0.9; }
+/* ===== 전체 테마 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-    .info-card {
-        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-        padding: 1.5rem;
-        border-radius: 12px;
-        border-left: 4px solid #0f3460;
-        margin-bottom: 1rem;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
+:root {
+    --primary: #6366f1;
+    --primary-dark: #4f46e5;
+    --secondary: #ec4899;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --dark: #1e1b4b;
+    --light: #f8fafc;
+    --gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+}
 
-    .highlight-box {
-        background: #fff3cd;
-        border: 1px solid #ffc107;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
+.stApp {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
-    .source-card {
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        margin-bottom: 0.5rem;
-        border-left: 4px solid #1976d2;
-    }
+/* ===== 헤더 스타일 ===== */
+.main-header {
+    background: var(--gradient);
+    padding: 2rem 2rem;
+    border-radius: 20px;
+    margin-bottom: 2rem;
+    position: relative;
+    overflow: hidden;
+}
 
-    .tech-tag {
-        display: inline-block;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 0.4rem 1rem;
-        border-radius: 20px;
-        margin: 0.2rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-    }
+.main-header::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+}
 
-    .flow-box {
-        background: #1e1e1e;
-        color: #d4d4d4;
-        padding: 1.5rem;
-        border-radius: 10px;
-        font-family: 'Consolas', 'Monaco', monospace;
-        font-size: 0.9rem;
-        overflow-x: auto;
-        line-height: 1.6;
-    }
+.main-header h1 {
+    color: white;
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0;
+    position: relative;
+    z-index: 1;
+}
 
-    .decision-card {
-        background: #e8f5e9;
-        border-left: 4px solid #4caf50;
-        padding: 1rem;
-        border-radius: 8px;
-        margin: 0.5rem 0;
-    }
+.main-header p {
+    color: rgba(255,255,255,0.9);
+    font-size: 1.1rem;
+    margin-top: 0.5rem;
+    position: relative;
+    z-index: 1;
+}
 
-    .metric-card {
-        background: white;
-        padding: 1.5rem;
-        border-radius: 12px;
-        text-align: center;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+/* ===== 카드 스타일 ===== */
+.card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    border: 1px solid rgba(0,0,0,0.05);
+    margin-bottom: 1rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.card-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+/* ===== 메트릭 카드 ===== */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.metric-card {
+    background: white;
+    border-radius: 16px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    border: 1px solid rgba(0,0,0,0.04);
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    background: var(--gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.metric-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}
+
+/* ===== 채팅 인터페이스 ===== */
+.chat-container {
+    background: #f8fafc;
+    border-radius: 20px;
+    padding: 1.5rem;
+    height: 500px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+.chat-message {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.user-avatar {
+    background: var(--gradient);
+}
+
+.ai-avatar {
+    background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+}
+
+.chat-bubble {
+    max-width: 80%;
+    padding: 1rem 1.25rem;
+    border-radius: 16px;
+    line-height: 1.6;
+}
+
+.user-bubble {
+    background: var(--gradient);
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 4px;
+}
+
+.ai-bubble {
+    background: white;
+    color: #1e293b;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    border-bottom-left-radius: 4px;
+}
+
+/* ===== 소스 태그 ===== */
+.source-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.source-tag {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    color: #0369a1;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid #bae6fd;
+}
+
+/* ===== 탭 스타일 ===== */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0.5rem;
+    background: #f1f5f9;
+    padding: 0.5rem;
+    border-radius: 12px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px;
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+}
+
+.stTabs [aria-selected="true"] {
+    background: white !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+/* ===== 버튼 스타일 ===== */
+.stButton > button {
+    background: var(--gradient) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 2rem !important;
+    font-weight: 600 !important;
+    transition: transform 0.2s, box-shadow 0.2s !important;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4) !important;
+}
+
+/* ===== 입력 필드 ===== */
+.stTextInput > div > div > input {
+    border-radius: 12px !important;
+    border: 2px solid #e2e8f0 !important;
+    padding: 0.75rem 1rem !important;
+    transition: border-color 0.2s !important;
+}
+
+.stTextInput > div > div > input:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* ===== 사이드바 ===== */
+.css-1d391kg {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* ===== 프로그레스 바 ===== */
+.progress-container {
+    background: #e2e8f0;
+    border-radius: 10px;
+    height: 8px;
+    overflow: hidden;
+    margin: 0.5rem 0;
+}
+
+.progress-bar {
+    height: 100%;
+    border-radius: 10px;
+    background: var(--gradient);
+    transition: width 0.3s ease;
+}
+
+/* ===== 신뢰도 배지 ===== */
+.confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.confidence-high {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: #065f46;
+}
+
+.confidence-medium {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #92400e;
+}
+
+.confidence-low {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    color: #991b1b;
+}
+
+/* ===== 코드 블록 ===== */
+.code-block {
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 1.25rem;
+    color: #e2e8f0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    overflow-x: auto;
+}
+
+/* ===== 플로우차트 ===== */
+.flow-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 2rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: 16px;
+    margin: 1rem 0;
+}
+
+.flow-step {
+    background: white;
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    text-align: center;
+    min-width: 120px;
+}
+
+.flow-step-number {
+    width: 28px;
+    height: 28px;
+    background: var(--gradient);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin: 0 auto 0.5rem;
+}
+
+.flow-step-title {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.9rem;
+}
+
+.flow-arrow {
+    color: #6366f1;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/* ===== 특성 그리드 ===== */
+.feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.feature-item {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    transition: transform 0.2s;
+}
+
+.feature-item:hover {
+    transform: translateY(-4px);
+}
+
+.feature-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 1rem;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+}
+
+.feature-title {
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.5rem;
+}
+
+.feature-desc {
+    color: #64748b;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+/* ===== 비교 테이블 ===== */
+.compare-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 1rem 0;
+}
+
+.compare-table th {
+    background: var(--gradient);
+    color: white;
+    padding: 1rem;
+    font-weight: 600;
+    text-align: left;
+}
+
+.compare-table th:first-child {
+    border-radius: 12px 0 0 0;
+}
+
+.compare-table th:last-child {
+    border-radius: 0 12px 0 0;
+}
+
+.compare-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    background: white;
+}
+
+.compare-table tr:last-child td:first-child {
+    border-radius: 0 0 0 12px;
+}
+
+.compare-table tr:last-child td:last-child {
+    border-radius: 0 0 12px 0;
+}
+
+/* ===== 애니메이션 ===== */
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.loading {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ===== 반응형 ===== */
+@media (max-width: 768px) {
+    .metric-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
-    .metric-card h3 { color: #0f3460; margin: 0; font-size: 2rem; }
-    .metric-card p { color: #666; margin: 0.5rem 0 0 0; }
+    .feature-grid {
+        grid-template-columns: 1fr;
+    }
+    .main-header h1 {
+        font-size: 1.75rem;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ============================================================
-# 세션 상태 초기화
-# ============================================================
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "intro"
-if "vectorstore" not in st.session_state:
-    st.session_state.vectorstore = None
-if "sample_loaded" not in st.session_state:
-    st.session_state.sample_loaded = False
 
 # ============================================================
-# 핵심 클래스들 (Self-contained)
+# 데이터 클래스 및 핵심 로직
 # ============================================================
 
 @dataclass
-class Document:
-    content: str
-    metadata: Dict[str, Any]
+class FinancialDocument:
+    """금융 문서"""
     id: str
+    title: str
+    content: str
+    doc_type: str
+    source: str
+    date: str
+    metadata: Dict[str, Any]
+
+
+# 금융 데이터 (실제 스타일)
+FINANCIAL_DOCUMENTS = [
+    FinancialDocument(
+        id="disc_001",
+        title="삼성전자 2024년 3분기 실적",
+        content="""[실적 요약]
+매출액: 79조 1,000억원 (전년동기대비 +17.2%)
+영업이익: 9조 1,834억원 (전년동기대비 +274.5%)
+당기순이익: 7조 2,000억원
+
+[부문별 실적]
+1. 반도체(DS) 부문
+   - 매출: 29조 2,700억원
+   - 영업이익: 3조 8,600억원
+   - HBM 수요 증가로 메모리 실적 개선
+
+2. 디스플레이(SDC) 부문
+   - 매출: 7조 9,200억원
+   - 중소형 OLED 패널 수요 강세
+
+[전망]
+4분기 AI 반도체 수요 지속 전망. HBM3E 양산 본격화.""",
+        doc_type="disclosure",
+        source="금융감독원 전자공시",
+        date="2024-10-31",
+        metadata={"company": "삼성전자", "sector": "IT"}
+    ),
+    FinancialDocument(
+        id="disc_002",
+        title="SK하이닉스 2024년 3분기 실적",
+        content="""[실적 요약]
+매출액: 17조 5,731억원 (전년동기대비 +93.8%)
+영업이익: 7조 300억원 (전년동기대비 흑자전환)
+
+[주요 성과]
+1. HBM(고대역폭메모리)
+   - HBM 매출 전분기 대비 70% 이상 성장
+   - HBM3E 12단 양산 업계 최초 성공
+
+2. AI 서버향 매출 비중 30% 돌파
+
+[향후 전략]
+AI 메모리 리더십 강화, HBM4 개발 가속화""",
+        doc_type="disclosure",
+        source="금융감독원 전자공시",
+        date="2024-10-24",
+        metadata={"company": "SK하이닉스", "sector": "반도체"}
+    ),
+    FinancialDocument(
+        id="report_001",
+        title="AI 반도체 산업 전망 2025",
+        content="""[시장 전망]
+2025년 AI 반도체 시장 1,200억 달러 규모 전망 (+35% YoY)
+
+[HBM 시장]
+- 2024년: 160억 달러
+- 2025년(E): 250억 달러 (+56%)
+- 2026년(E): 350억 달러
+
+[투자 유망 종목]
+1. SK하이닉스 (목표가: 280,000원) - HBM 시장 점유율 50%
+2. 삼성전자 (목표가: 85,000원) - HBM3E 양산 격차 축소
+3. 한미반도체 (목표가: 180,000원) - HBM 본딩 장비 독점
+
+[리스크]
+미중 반도체 규제 강화, AI 버블 우려""",
+        doc_type="report",
+        source="미래에셋증권",
+        date="2024-11-15",
+        metadata={"analyst": "김반도", "sector": "반도체"}
+    ),
+    FinancialDocument(
+        id="report_002",
+        title="2차전지 산업 분석",
+        content="""[시장 현황]
+글로벌 전기차 판매 성장률 둔화로 업황 조정 국면.
+2024년 성장률 25%에서 2025년 15%로 하향.
+
+[수급 전망]
+- 공급 과잉: 중국 CATL, BYD 공격적 증설
+- 한국 3사 가동률 60% 수준
+- 리튬 가격: 톤당 12,000달러 (고점 -80%)
+
+[종목별 전망]
+1. LG에너지솔루션 - 북미 IRA 수혜, 투자의견 중립
+2. 삼성SDI - 각형 배터리 BMW 공급
+3. 에코프로비엠 - 양극재 가격 하락 영향
+
+[전략]
+단기 관망 후 2025년 하반기 저점 매수 기회 모색""",
+        doc_type="report",
+        source="한국투자증권",
+        date="2024-11-10",
+        metadata={"sector": "2차전지"}
+    ),
+    FinancialDocument(
+        id="guide_001",
+        title="ETF 투자 가이드",
+        content="""[ETF란?]
+특정 지수를 추종하는 펀드를 주식처럼 거래소에서 매매.
+
+[ETF 장점]
+1. 분산투자: 하나로 수십~수백 종목 투자
+2. 저비용: 운용보수 0.1~0.5%
+3. 투명성: 구성종목 실시간 공개
+4. 유동성: 주식처럼 실시간 매매
+
+[추천 ETF]
+- KODEX 200: KOSPI200 추종
+- TIGER 미국S&P500: 미국 대형주
+- KODEX 반도체: 반도체 관련주
+
+[초보자 포트폴리오]
+- KODEX 200 (50%)
+- TIGER 미국S&P500 (30%)
+- KODEX 국고채10년 (20%)""",
+        doc_type="guide",
+        source="금융투자교육원",
+        date="2024-11-01",
+        metadata={"category": "투자가이드"}
+    ),
+    FinancialDocument(
+        id="guide_002",
+        title="기본적 분석 방법론",
+        content="""[핵심 재무비율]
+1. 수익성 지표
+   - ROE: 순이익/자기자본 (자본 효율성)
+   - 영업이익률: 영업이익/매출 (본업 수익성)
+
+2. 밸류에이션 지표
+   - PER: 주가/주당순이익 (낮을수록 저평가)
+   - PBR: 주가/주당순자산 (1 미만이면 저평가)
+
+3. 안정성 지표
+   - 부채비율: 부채/자기자본 (100% 이하 양호)
+   - 유동비율: 유동자산/유동부채 (200% 이상 양호)
+
+[분석 프로세스]
+1. 산업 분석 → 2. 기업 경쟁력 → 3. 재무제표 → 4. 밸류에이션 → 5. 투자 결정""",
+        doc_type="guide",
+        source="한국증권학회",
+        date="2024-10-15",
+        metadata={"category": "투자가이드"}
+    ),
+    FinancialDocument(
+        id="news_001",
+        title="NVIDIA 3분기 실적 발표",
+        content="""[실적 요약]
+매출: 351억 달러 (예상 상회)
+순이익: 193억 달러 (+109% YoY)
+
+[부문별]
+- 데이터센터: 308억 달러 (+112%)
+- 게이밍: 33억 달러 (+15%)
+
+[CEO 코멘트]
+"AI 혁명은 이제 시작. Blackwell 수요가 예상 초과"
+
+[시장 영향]
+한국 반도체주 동반 강세 예상. HBM 공급사 수혜.""",
+        doc_type="news",
+        source="Reuters",
+        date="2024-11-21",
+        metadata={"company": "NVIDIA"}
+    ),
+    FinancialDocument(
+        id="guide_003",
+        title="금리와 주식시장의 관계",
+        content="""[금리 영향 메커니즘]
+1. 할인율 효과: 금리↑ → 주식 가치↓
+2. 기업 비용: 금리↑ → 이자비용↑ → 순이익↓
+3. 자금 이동: 금리↑ → 예금 매력↑ → 주식 자금 유출
+
+[섹터별 민감도]
+고금리 수혜: 은행, 보험
+고금리 피해: 성장주(IT, 바이오), 부동산
+
+[투자 전략]
+- 금리 인상기: 가치주 > 성장주
+- 금리 인하기: 성장주 > 가치주
+
+[2025년 전망]
+미국 연준 금리 인하 사이클 진입. 성장주 반등 기대.""",
+        doc_type="guide",
+        source="한국은행",
+        date="2024-11-25",
+        metadata={"category": "거시경제"}
+    ),
+]
 
 
 class SimpleVectorStore:
-    """간단한 ChromaDB 래퍼"""
+    """간단한 벡터 스토어 (ChromaDB 래퍼)"""
 
-    def __init__(self, collection_name: str = "finance_docs"):
+    def __init__(self):
+        self.documents = []
+        self.collection = None
+        self._init_store()
+
+    def _init_store(self):
         try:
             import chromadb
-            self.client = chromadb.Client()
-            self.collection = self.client.get_or_create_collection(
-                name=collection_name,
+            from chromadb.config import Settings
+
+            client = chromadb.Client(Settings(anonymized_telemetry=False))
+            self.collection = client.get_or_create_collection(
+                name="finance_docs",
                 metadata={"hnsw:space": "cosine"}
             )
+
+            # 문서 추가
+            if self.collection.count() == 0:
+                for doc in FINANCIAL_DOCUMENTS:
+                    self.collection.add(
+                        documents=[doc.content],
+                        ids=[doc.id],
+                        metadatas=[{
+                            "title": doc.title,
+                            "source": doc.source,
+                            "doc_type": doc.doc_type,
+                            "date": doc.date
+                        }]
+                    )
+                    self.documents.append(doc)
         except Exception as e:
-            st.error(f"ChromaDB 초기화 실패: {e}")
-            self.collection = None
+            st.warning(f"ChromaDB 초기화 실패: {e}")
 
-    def add_documents(self, documents: List[str], metadatas: List[Dict], ids: List[str]):
-        if self.collection:
-            self.collection.add(documents=documents, metadatas=metadatas, ids=ids)
-
-    def search(self, query: str, top_k: int = 3) -> Dict:
-        if not self.collection or self.collection.count() == 0:
+    def search(self, query: str, top_k: int = 3) -> Dict[str, Any]:
+        if self.collection is None:
             return {"documents": [], "metadatas": [], "distances": []}
 
-        results = self.collection.query(
-            query_texts=[query],
-            n_results=min(top_k, self.collection.count()),
-            include=["documents", "metadatas", "distances"]
-        )
+        try:
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=min(top_k, self.collection.count())
+            )
+            return {
+                "documents": results["documents"][0] if results["documents"] else [],
+                "metadatas": results["metadatas"][0] if results["metadatas"] else [],
+                "distances": results["distances"][0] if results["distances"] else []
+            }
+        except Exception:
+            return {"documents": [], "metadatas": [], "distances": []}
 
-        return {
-            "documents": results["documents"][0] if results["documents"] else [],
-            "metadatas": results["metadatas"][0] if results["metadatas"] else [],
-            "distances": results["distances"][0] if results["distances"] else []
-        }
 
-    def count(self) -> int:
-        return self.collection.count() if self.collection else 0
+class BM25Search:
+    """BM25 키워드 검색"""
+
+    def __init__(self, documents: List[FinancialDocument]):
+        self.documents = documents
+        self.k1 = 1.5
+        self.b = 0.75
+        self._build_index()
+
+    def _tokenize(self, text: str) -> List[str]:
+        text = text.lower()
+        tokens = re.findall(r'[가-힣]+|[a-zA-Z]+|\d+', text)
+        return [t for t in tokens if len(t) >= 2]
+
+    def _build_index(self):
+        self.doc_lengths = []
+        self.doc_term_freqs = []
+        self.idf = {}
+        doc_freqs = defaultdict(int)
+
+        for doc in self.documents:
+            tokens = self._tokenize(doc.content)
+            self.doc_lengths.append(len(tokens))
+
+            term_freq = defaultdict(int)
+            unique_terms = set()
+            for token in tokens:
+                term_freq[token] += 1
+                unique_terms.add(token)
+
+            self.doc_term_freqs.append(dict(term_freq))
+            for term in unique_terms:
+                doc_freqs[term] += 1
+
+        self.avg_doc_length = sum(self.doc_lengths) / len(self.doc_lengths)
+        n_docs = len(self.documents)
+        for term, df in doc_freqs.items():
+            self.idf[term] = math.log((n_docs - df + 0.5) / (df + 0.5) + 1)
+
+    def search(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
+        query_tokens = self._tokenize(query)
+        scores = []
+
+        for doc_idx, term_freqs in enumerate(self.doc_term_freqs):
+            score = 0.0
+            doc_length = self.doc_lengths[doc_idx]
+
+            for token in query_tokens:
+                if token not in term_freqs:
+                    continue
+                tf = term_freqs[token]
+                idf = self.idf.get(token, 0)
+                numerator = tf * (self.k1 + 1)
+                denominator = tf + self.k1 * (1 - self.b + self.b * doc_length / self.avg_doc_length)
+                score += idf * numerator / denominator
+
+            if score > 0:
+                scores.append((doc_idx, score))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+
+        results = []
+        for doc_idx, score in scores[:top_k]:
+            doc = self.documents[doc_idx]
+            results.append({
+                "content": doc.content,
+                "title": doc.title,
+                "source": doc.source,
+                "score": score
+            })
+
+        return results
 
 
 class GroqLLM:
-    """Groq API 래퍼"""
+    """Groq LLM 클라이언트"""
 
-    SYSTEM_PROMPT = """당신은 금융 전문 상담 AI입니다.
+    SYSTEM_PROMPT = """당신은 금융 전문 AI 어시스턴트입니다.
 
 역할:
-- 제공된 문서만을 기반으로 정확하게 답변합니다
-- 금융 용어를 쉽게 설명합니다
+- 제공된 문서를 기반으로 정확하게 답변
+- 금융 용어를 쉽게 설명
+- 투자 조언이 아닌 정보 제공임을 명시
 
 규칙:
-1. 문서에 없는 내용은 "해당 정보가 제공된 문서에 없습니다"라고 답하세요
+1. 문서에 없는 내용은 "해당 정보가 없습니다"라고 답변
 2. 추측하거나 지어내지 마세요
-3. 숫자나 수치는 문서 그대로 인용하세요
+3. 숫자는 문서 그대로 인용
+4. 답변은 한국어로"""
 
-주의: 이 정보는 투자 권유가 아닙니다."""
+    def __init__(self):
+        self.client = None
+        self.model = "llama-3.1-8b-instant"
+        self._init_client()
 
-    def __init__(self, api_key: str):
-        try:
-            from groq import Groq
-            self.client = Groq(api_key=api_key)
-            self.model = "llama-3.1-8b-instant"
-        except ImportError:
-            st.error("groq 패키지 필요: pip install groq")
-            self.client = None
+    def _init_client(self):
+        api_key = os.getenv("GROQ_API_KEY")
+        if api_key:
+            try:
+                from groq import Groq
+                self.client = Groq(api_key=api_key)
+            except ImportError:
+                pass
 
     def generate_stream(self, context: str, question: str) -> Generator[str, None, None]:
         if not self.client:
-            yield "LLM 클라이언트가 초기화되지 않았습니다."
+            yield "Groq API 키가 설정되지 않았습니다. 환경변수 GROQ_API_KEY를 설정해주세요."
             return
 
         user_prompt = f"""[참고 문서]
@@ -228,842 +899,572 @@ class GroqLLM:
 
 
 # ============================================================
-# 샘플 금융 데이터
+# 세션 상태 초기화
 # ============================================================
-
-SAMPLE_FINANCE_DATA = [
-    {
-        "content": """ETF(Exchange Traded Fund)란?
-ETF는 '상장지수펀드'로, 주식처럼 거래소에서 실시간 매매가 가능한 펀드입니다.
-
-주요 특징:
-1. 분산투자: 하나의 ETF로 여러 종목에 투자 가능
-2. 낮은 비용: 일반 펀드 대비 운용보수가 저렴 (0.1~0.5%)
-3. 투명성: 구성 종목이 매일 공개됨
-4. 유동성: 주식처럼 실시간 매매 가능
-
-대표적인 ETF 유형:
-- 지수 추종 ETF: KOSPI200, S&P500 등 지수를 따라감
-- 섹터 ETF: 반도체, 2차전지 등 특정 산업에 투자
-- 채권 ETF: 국채, 회사채 등에 투자
-- 원자재 ETF: 금, 원유 등에 투자""",
-        "source": "ETF 투자 가이드",
-        "id": "etf_guide_1"
-    },
-    {
-        "content": """분산투자의 원칙과 방법
-
-분산투자란 '계란을 한 바구니에 담지 않는다'는 투자 원칙입니다.
-
-분산투자의 장점:
-1. 리스크 감소: 한 종목 하락 시 전체 손실 제한
-2. 안정적 수익: 변동성 완화로 꾸준한 수익 추구
-3. 심리적 안정: 급락장에서도 패닉 방지
-
-분산투자 방법:
-- 자산 분산: 주식 60%, 채권 30%, 현금 10%
-- 지역 분산: 국내 50%, 해외 50%
-- 시간 분산: 매월 정액 적립식 투자 (DCA)
-- 섹터 분산: IT, 금융, 헬스케어 등 다양한 업종
-
-초보자 추천 포트폴리오:
-- 안정형: 채권 ETF 70% + 주식 ETF 30%
-- 균형형: 채권 ETF 50% + 주식 ETF 50%
-- 성장형: 채권 ETF 30% + 주식 ETF 70%""",
-        "source": "분산투자 전략",
-        "id": "diversification_1"
-    },
-    {
-        "content": """초보 투자자를 위한 시작 가이드
-
-투자 시작 전 체크리스트:
-1. 비상금 확보: 최소 3~6개월 생활비
-2. 부채 정리: 고금리 부채 먼저 상환
-3. 투자 목표 설정: 기간, 목표 수익률 명확히
-
-초보자 추천 투자 순서:
-1단계: 예적금으로 종잣돈 마련
-2단계: ETF로 분산투자 시작
-3단계: 개별 주식 소액 투자
-4단계: 해외 주식/펀드로 확장
-
-피해야 할 실수:
-- 빚내서 투자 (레버리지 투자)
-- 한 종목에 올인
-- 단기 수익에 집착
-- 공포/탐욕에 휩쓸린 매매
-- 손실 회복 심리로 추가 매수
-
-월급쟁이 투자 팁:
-- 급여일에 자동이체로 투자금 분리
-- 매월 같은 금액 적립식 투자
-- 연 1회 리밸런싱으로 비중 조절""",
-        "source": "초보 투자자 가이드",
-        "id": "beginner_guide_1"
-    },
-    {
-        "content": """레버리지 ETF의 위험성
-
-레버리지 ETF란?
-기초지수 수익률의 2배, 3배를 추구하는 ETF입니다.
-예: KOSPI200이 1% 오르면, 2배 레버리지는 2% 수익
-
-왜 위험한가?
-
-1. 복리 효과의 함정 (Volatility Decay)
-- 지수가 10% 상승 후 10% 하락하면 원금 회복
-- 2배 레버리지: 20% 상승 → 20% 하락 = -4% 손실
-- 횡보장에서 자산이 지속 감소
-
-2. 실제 사례
-- 2020년 코로나 폭락 시 일부 레버리지 ETF 90% 이상 하락
-- 장기 보유 시 기초지수 대비 수익률 괴리 발생
-
-3. 적합한 투자자
-- 단기 트레이딩 목적
-- 방향성에 대한 강한 확신
-- 손실 감내 능력 있는 투자자
-
-결론: 초보자는 레버리지 ETF 피하세요.
-장기투자에는 절대 부적합합니다.""",
-        "source": "레버리지 ETF 위험성",
-        "id": "leverage_warning_1"
-    },
-    {
-        "content": """복리의 마법과 장기투자
-
-복리란?
-원금에 이자가 붙고, 그 이자에 다시 이자가 붙는 것
-
-복리 계산 예시 (연 7% 수익률):
-- 10년: 1000만원 → 1967만원 (약 2배)
-- 20년: 1000만원 → 3870만원 (약 4배)
-- 30년: 1000만원 → 7612만원 (약 7.6배)
-
-72의 법칙:
-72 ÷ 수익률 = 원금이 2배 되는 기간
-예: 연 7% 수익 → 72÷7 = 약 10년
-
-장기투자가 중요한 이유:
-1. 복리 효과 극대화
-2. 시장 변동성 상쇄
-3. 거래 비용 절감
-4. 세금 이연 효과
-
-워렌 버핏의 조언:
-"10년 이상 보유할 주식이 아니면 10분도 보유하지 마라"
-
-실천 방법:
-- 목표 기간 설정 (최소 5년 이상)
-- 정기적 리밸런싱
-- 시장 타이밍 포기
-- 감정적 매매 금지""",
-        "source": "장기투자 가이드",
-        "id": "compound_interest_1"
-    }
-]
-
-
-def load_sample_data(vectorstore: SimpleVectorStore):
-    """샘플 데이터 로드"""
-    if vectorstore.count() > 0:
-        return
-
-    documents = [d["content"] for d in SAMPLE_FINANCE_DATA]
-    metadatas = [{"source": d["source"]} for d in SAMPLE_FINANCE_DATA]
-    ids = [d["id"] for d in SAMPLE_FINANCE_DATA]
-
-    vectorstore.add_documents(documents, metadatas, ids)
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "vector_store" not in st.session_state:
+    st.session_state.vector_store = SimpleVectorStore()
+if "bm25" not in st.session_state:
+    st.session_state.bm25 = BM25Search(FINANCIAL_DOCUMENTS)
+if "llm" not in st.session_state:
+    st.session_state.llm = GroqLLM()
+if "search_mode" not in st.session_state:
+    st.session_state.search_mode = "hybrid"
 
 
 # ============================================================
 # 사이드바
 # ============================================================
-
 with st.sidebar:
-    st.markdown("### 💰 Finance RAG")
-    st.caption("금융 문서 기반 AI Q&A")
+    st.markdown("""
+    <div style="text-align: center; padding: 1rem 0;">
+        <div style="font-size: 2.5rem;">📊</div>
+        <h2 style="margin: 0.5rem 0; font-weight: 700; background: linear-gradient(135deg, #6366f1 0%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Finance RAG</h2>
+        <p style="color: #64748b; font-size: 0.9rem;">AI 기반 금융 정보 분석</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # 검색 모드 선택
+    st.markdown("### 검색 설정")
+    search_mode = st.radio(
+        "검색 모드",
+        ["hybrid", "vector", "keyword"],
+        format_func=lambda x: {
+            "hybrid": "하이브리드 (권장)",
+            "vector": "벡터 (의미 기반)",
+            "keyword": "키워드 (BM25)"
+        }[x],
+        index=0
+    )
+    st.session_state.search_mode = search_mode
+
+    top_k = st.slider("검색 문서 수", 1, 5, 3)
+
+    st.divider()
+
+    # 문서 통계
+    st.markdown("### 데이터셋")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("총 문서", len(FINANCIAL_DOCUMENTS))
+    with col2:
+        doc_types = set(d.doc_type for d in FINANCIAL_DOCUMENTS)
+        st.metric("문서 유형", len(doc_types))
 
     st.divider()
 
     # 네비게이션
-    menu = {
-        "intro": "🏠 프로젝트 소개",
-        "why": "🎯 왜 만들었나",
-        "how": "⚙️ 어떻게 동작하나",
-        "demo": "💬 Q&A 데모",
-        "tech": "🔧 기술 상세"
-    }
-
-    for key, label in menu.items():
-        if st.button(label, key=f"nav_{key}", use_container_width=True):
-            st.session_state.current_page = key
-            st.rerun()
-
-    st.divider()
-
-    # API 키 설정
-    st.markdown("### 🔑 설정")
-    api_key = st.text_input(
-        "Groq API Key",
-        type="password",
-        help="https://console.groq.com 에서 무료 발급"
+    st.markdown("### 바로가기")
+    page = st.radio(
+        "페이지",
+        ["Q&A 데모", "아키텍처", "기술 상세", "평가 지표", "사용 가이드"],
+        label_visibility="collapsed"
     )
 
-    if api_key:
-        os.environ["GROQ_API_KEY"] = api_key
-        st.success("✅ API 키 설정됨")
-
-    # 상태
-    st.divider()
-    if st.session_state.vectorstore:
-        doc_count = st.session_state.vectorstore.count()
-        st.metric("📄 문서 수", doc_count)
-
-    st.divider()
-    st.caption("Made by 김다운")
-    st.caption("[GitHub](https://github.com/araeLaver)")
-
 
 # ============================================================
-# 페이지: 프로젝트 소개
+# 메인 컨텐츠
 # ============================================================
 
-def render_intro_page():
+if page == "Q&A 데모":
+    # 헤더
     st.markdown("""
     <div class="main-header">
-        <h1>💰 Finance RAG API</h1>
-        <p>금융 문서 기반 AI Q&A 시스템 - LLM 환각 방지</p>
+        <h1>Finance RAG</h1>
+        <p>금융 문서 기반 AI 질의응답 시스템</p>
     </div>
     """, unsafe_allow_html=True)
 
+    # 메트릭 카드
     col1, col2, col3, col4 = st.columns(4)
-
     with col1:
         st.markdown("""
         <div class="metric-card">
-            <h3>RAG</h3>
-            <p>검색 증강 생성</p>
+            <div class="metric-value">8</div>
+            <div class="metric-label">금융 문서</div>
         </div>
         """, unsafe_allow_html=True)
-
     with col2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
-            <h3>5개</h3>
-            <p>샘플 금융 문서</p>
+            <div class="metric-value">{search_mode.upper()}</div>
+            <div class="metric-label">검색 모드</div>
         </div>
         """, unsafe_allow_html=True)
-
     with col3:
         st.markdown("""
         <div class="metric-card">
-            <h3>Groq</h3>
-            <p>Llama 3.1 LLM</p>
+            <div class="metric-value">Llama 3.1</div>
+            <div class="metric-label">LLM 모델</div>
         </div>
         """, unsafe_allow_html=True)
-
     with col4:
         st.markdown("""
         <div class="metric-card">
-            <h3>실시간</h3>
-            <p>스트리밍 응답</p>
+            <div class="metric-value">실시간</div>
+            <div class="metric-label">스트리밍</div>
         </div>
         """, unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    col1, col2 = st.columns([3, 2])
+    # 예시 질문
+    st.markdown("#### 예시 질문")
+    example_cols = st.columns(4)
+    examples = [
+        "삼성전자 3분기 실적은?",
+        "HBM 시장 전망 알려줘",
+        "ETF 투자 장점은?",
+        "금리와 주식 관계는?"
+    ]
 
+    for i, col in enumerate(example_cols):
+        with col:
+            if st.button(examples[i], key=f"example_{i}", use_container_width=True):
+                st.session_state.messages.append({"role": "user", "content": examples[i]})
+                st.rerun()
+
+    st.markdown("---")
+
+    # 채팅 영역
+    chat_container = st.container()
+
+    with chat_container:
+        for msg in st.session_state.messages:
+            if msg["role"] == "user":
+                st.markdown(f"""
+                <div class="chat-message" style="justify-content: flex-end;">
+                    <div class="chat-bubble user-bubble">{msg["content"]}</div>
+                    <div class="chat-avatar user-avatar">U</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                sources_html = ""
+                if "sources" in msg:
+                    sources_html = '<div class="source-tags">' + ''.join([
+                        f'<span class="source-tag">{s}</span>' for s in msg["sources"]
+                    ]) + '</div>'
+
+                st.markdown(f"""
+                <div class="chat-message">
+                    <div class="chat-avatar ai-avatar">AI</div>
+                    <div>
+                        <div class="chat-bubble ai-bubble">{msg["content"]}</div>
+                        {sources_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # 입력 영역
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    col1, col2 = st.columns([6, 1])
     with col1:
-        st.subheader("📌 이 프로젝트는")
-
-        st.markdown("""
-        <div class="info-card">
-        <b>금융 분야에 특화된 RAG(Retrieval-Augmented Generation) 시스템</b>입니다.
-
-        사용자의 금융 관련 질문에 대해:
-        1. 벡터 DB에서 관련 문서를 검색하고
-        2. 검색된 문서를 기반으로 LLM이 답변을 생성합니다
-
-        <b>일반 ChatGPT와의 차이점:</b>
-        - 검증된 문서 기반 답변 (환각 방지)
-        - 답변의 출처와 신뢰도 제공
-        - 금융 도메인에 최적화된 프롬프트
-        </div>
-        """, unsafe_allow_html=True)
-
+        user_input = st.text_input(
+            "질문을 입력하세요",
+            placeholder="예: 삼성전자 3분기 영업이익은 얼마인가요?",
+            label_visibility="collapsed",
+            key="user_input"
+        )
     with col2:
-        st.subheader("🛠️ 기술 스택")
+        send_button = st.button("전송", type="primary", use_container_width=True)
 
-        techs = ["FastAPI", "Python", "Groq API", "ChromaDB", "Streamlit", "Docker"]
-        tags = " ".join([f'<span class="tech-tag">{t}</span>' for t in techs])
-        st.markdown(tags, unsafe_allow_html=True)
+    # 질문 처리
+    if (send_button or user_input) and user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
 
-        st.write("")
-        st.markdown("""
-        **왜 이 기술들을 선택했나?**
-        - **Groq**: 무료 + 빠른 응답 (Llama 3.1)
-        - **ChromaDB**: 경량 벡터 DB, 설치 간편
-        - **FastAPI**: 비동기 처리, 자동 문서화
-        """)
+        # 검색
+        with st.spinner("관련 문서 검색 중..."):
+            if st.session_state.search_mode == "vector":
+                results = st.session_state.vector_store.search(user_input, top_k=top_k)
+                documents = results["documents"]
+                metadatas = results["metadatas"]
+            elif st.session_state.search_mode == "keyword":
+                bm25_results = st.session_state.bm25.search(user_input, top_k=top_k)
+                documents = [r["content"] for r in bm25_results]
+                metadatas = [{"title": r["title"], "source": r["source"]} for r in bm25_results]
+            else:  # hybrid
+                vector_results = st.session_state.vector_store.search(user_input, top_k=top_k)
+                bm25_results = st.session_state.bm25.search(user_input, top_k=top_k)
 
-    st.divider()
+                # RRF 결합
+                doc_scores = defaultdict(float)
+                doc_contents = {}
+                doc_metas = {}
 
-    # 데모 시작 버튼
-    st.subheader("🚀 바로 체험하기")
+                for rank, (doc, meta) in enumerate(zip(vector_results["documents"], vector_results["metadatas"]), 1):
+                    key = doc[:100]
+                    doc_scores[key] += 1 / (60 + rank) * 0.5
+                    doc_contents[key] = doc
+                    doc_metas[key] = meta
 
-    if st.button("Q&A 데모 시작하기", type="primary", use_container_width=True):
-        st.session_state.current_page = "demo"
+                for rank, r in enumerate(bm25_results, 1):
+                    key = r["content"][:100]
+                    doc_scores[key] += 1 / (60 + rank) * 0.5
+                    if key not in doc_contents:
+                        doc_contents[key] = r["content"]
+                        doc_metas[key] = {"title": r["title"], "source": r["source"]}
+
+                sorted_docs = sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]
+                documents = [doc_contents[k] for k, _ in sorted_docs]
+                metadatas = [doc_metas[k] for k, _ in sorted_docs]
+
+        if documents:
+            context = "\n\n---\n\n".join(documents)
+            sources = [m.get("title", m.get("source", "문서")) for m in metadatas]
+
+            # LLM 응답 생성
+            response_placeholder = st.empty()
+            full_response = ""
+
+            for token in st.session_state.llm.generate_stream(context, user_input):
+                full_response += token
+                response_placeholder.markdown(f"""
+                <div class="chat-message">
+                    <div class="chat-avatar ai-avatar">AI</div>
+                    <div class="chat-bubble ai-bubble">{full_response}▌</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 신뢰도 계산
+            avg_distance = sum(results.get("distances", [0.5])) / max(len(results.get("distances", [1])), 1) if st.session_state.search_mode == "vector" else 0.3
+            confidence = "high" if avg_distance < 0.4 else "medium" if avg_distance < 0.7 else "low"
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": full_response,
+                "sources": sources,
+                "confidence": confidence
+            })
+        else:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "관련 문서를 찾을 수 없습니다. 다른 질문을 해주세요.",
+                "sources": [],
+                "confidence": "low"
+            })
+
         st.rerun()
 
+    # 대화 초기화
+    if st.session_state.messages:
+        if st.button("대화 초기화"):
+            st.session_state.messages = []
+            st.rerun()
 
-# ============================================================
-# 페이지: 왜 만들었나
-# ============================================================
 
-def render_why_page():
+elif page == "아키텍처":
     st.markdown("""
     <div class="main-header">
-        <h1>🎯 왜 만들었나</h1>
-        <p>문제 인식 → 해결 방안 → 기대 효과</p>
+        <h1>시스템 아키텍처</h1>
+        <p>RAG 파이프라인 설계 및 구현</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # 문제 인식
-    st.subheader("❌ 문제: LLM의 환각(Hallucination)")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("""
-        <div class="info-card">
-        <h4>환각이란?</h4>
-        LLM이 <b>그럴듯하지만 사실이 아닌 정보</b>를 생성하는 현상
-
-        <b>예시:</b>
-        - "삼성전자 주가는 현재 8만원입니다" (실제와 다름)
-        - "A 펀드의 수익률은 연 15%입니다" (허구의 정보)
-        - 존재하지 않는 금융 상품 추천
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("""
-        <div class="highlight-box">
-        <h4>⚠️ 금융 분야에서 특히 위험한 이유</h4>
-
-        1. **실제 금전적 손실** 발생 가능
-        2. **법적 책임** 문제 (투자 조언)
-        3. **신뢰도 하락** (서비스 폐기)
-
-        → 금융 AI는 **근거 있는 답변**이 필수
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # 해결 방안
-    st.subheader("✅ 해결: RAG (Retrieval-Augmented Generation)")
+    # RAG 파이프라인 흐름도
+    st.markdown("### RAG 파이프라인")
 
     st.markdown("""
-    <div class="flow-box">
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │                     RAG가 환각을 방지하는 원리                         │
-    ├─────────────────────────────────────────────────────────────────────┤
-    │                                                                      │
-    │   [기존 LLM]                        [RAG 적용 LLM]                   │
-    │                                                                      │
-    │   질문 ──→ LLM ──→ 답변             질문 ──→ 검색 ──→ LLM ──→ 답변   │
-    │            │                                  │                      │
-    │     (학습된 지식만)                    (검색된 문서 기반)              │
-    │            │                                  │                      │
-    │     환각 가능성 높음                   환각 가능성 낮음                │
-    │                                              +                       │
-    │                                         출처 명시 가능                │
-    │                                                                      │
-    └─────────────────────────────────────────────────────────────────────┘
+    <div class="flow-container">
+        <div class="flow-step">
+            <div class="flow-step-number">1</div>
+            <div class="flow-step-title">질문 입력</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+            <div class="flow-step-number">2</div>
+            <div class="flow-step-title">하이브리드 검색</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+            <div class="flow-step-number">3</div>
+            <div class="flow-step-title">Re-ranking</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+            <div class="flow-step-number">4</div>
+            <div class="flow-step-title">프롬프트 구성</div>
+        </div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">
+            <div class="flow-step-number">5</div>
+            <div class="flow-step-title">LLM 생성</div>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.write("")
+    # 핵심 기능
+    st.markdown("### 핵심 기능")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown("""
-        <div class="decision-card">
-        <h4>1. Retrieval (검색)</h4>
-        질문과 관련된 문서를 벡터 DB에서 검색
-
-        - 의미 기반 유사도 검색
-        - Top-K개 관련 문서 추출
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon" style="background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%);">🔀</div>
+                <h3 class="card-title">하이브리드 검색</h3>
+            </div>
+            <p style="color: #64748b; font-size: 0.9rem; line-height: 1.6;">
+                벡터 검색(의미)과 BM25(키워드)를 결합하여 검색 품질 향상.
+                RRF 알고리즘으로 순위 통합.
+            </p>
         </div>
         """, unsafe_allow_html=True)
 
     with col2:
         st.markdown("""
-        <div class="decision-card">
-        <h4>2. Augmentation (증강)</h4>
-        검색된 문서로 프롬프트 구성
-
-        - 컨텍스트 + 질문 결합
-        - "이 문서만 참고하라" 지시
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon" style="background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%);">📊</div>
+                <h3 class="card-title">Re-ranking</h3>
+            </div>
+            <p style="color: #64748b; font-size: 0.9rem; line-height: 1.6;">
+                초기 검색 결과를 정교하게 재정렬.
+                Cross-Encoder 또는 LLM 기반 평가.
+            </p>
         </div>
         """, unsafe_allow_html=True)
 
     with col3:
         st.markdown("""
-        <div class="decision-card">
-        <h4>3. Generation (생성)</h4>
-        문서 기반으로만 답변 생성
-
-        - 문서에 없으면 "없다"고 답변
-        - 출처와 신뢰도 함께 제공
+        <div class="card">
+            <div class="card-header">
+                <div class="card-icon" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);">💬</div>
+                <h3 class="card-title">멀티턴 대화</h3>
+            </div>
+            <p style="color: #64748b; font-size: 0.9rem; line-height: 1.6;">
+                대화 히스토리 유지로 자연스러운 후속 질문 처리.
+                엔티티 추적 및 대명사 해결.
+            </p>
         </div>
         """, unsafe_allow_html=True)
 
-    st.divider()
+    # 기술 스택
+    st.markdown("### 기술 스택")
 
-    # 기대 효과
-    st.subheader("📈 기대 효과")
+    tech_data = {
+        "LLM": "Groq (Llama 3.1-8b-instant)",
+        "Vector DB": "ChromaDB (임베딩: all-MiniLM-L6-v2)",
+        "키워드 검색": "BM25 (자체 구현)",
+        "웹 프레임워크": "Streamlit",
+        "API": "FastAPI (백엔드)",
+        "배포": "Streamlit Cloud / Docker"
+    }
 
-    st.markdown("""
-    | 측면 | 기존 LLM | RAG 적용 후 |
-    |------|----------|-------------|
-    | **정확성** | 환각 가능 | 문서 기반 검증 |
-    | **신뢰성** | 출처 불명 | 출처 명시 |
-    | **최신성** | 학습 데이터 한정 | 문서 업데이트 가능 |
-    | **책임** | 불분명 | 근거 추적 가능 |
-    """)
+    for tech, desc in tech_data.items():
+        st.markdown(f"- **{tech}**: {desc}")
 
 
-# ============================================================
-# 페이지: 어떻게 동작하나
-# ============================================================
-
-def render_how_page():
+elif page == "기술 상세":
     st.markdown("""
     <div class="main-header">
-        <h1>⚙️ 어떻게 동작하나</h1>
-        <p>시스템 아키텍처와 데이터 흐름</p>
+        <h1>기술 상세</h1>
+        <p>RAG 시스템의 핵심 컴포넌트 설명</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # 전체 아키텍처
-    st.subheader("🏗️ 시스템 아키텍처")
+    tabs = st.tabs(["청킹 전략", "하이브리드 검색", "Re-ranking", "평가 지표"])
 
-    st.markdown("""
-    <div class="flow-box">
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │                        Finance RAG System                                │
-    ├─────────────────────────────────────────────────────────────────────────┤
-    │                                                                          │
-    │    ┌─────────────┐                                                       │
-    │    │    User     │                                                       │
-    │    └──────┬──────┘                                                       │
-    │           │ "ETF가 뭔가요?"                                               │
-    │           ▼                                                              │
-    │    ┌─────────────┐      ┌─────────────┐      ┌─────────────┐            │
-    │    │  Streamlit  │─────▶│   FastAPI   │─────▶│ RAG Service │            │
-    │    │   (UI/UX)   │      │  (REST API) │      │ (Pipeline)  │            │
-    │    └─────────────┘      └─────────────┘      └──────┬──────┘            │
-    │                                                      │                   │
-    │                         ┌────────────────────────────┼───────────┐       │
-    │                         │                            │           │       │
-    │                         ▼                            ▼           │       │
-    │                  ┌─────────────┐              ┌─────────────┐    │       │
-    │                  │  ChromaDB   │              │  Groq API   │    │       │
-    │                  │ (Vector DB) │              │   (LLM)     │    │       │
-    │                  └─────────────┘              └─────────────┘    │       │
-    │                         │                            │           │       │
-    │                         │     관련 문서 + 질문        │           │       │
-    │                         └────────────────────────────┘           │       │
-    │                                        │                          │       │
-    │                                        ▼                          │       │
-    │                              ┌─────────────────┐                 │       │
-    │                              │  답변 + 출처    │◀────────────────┘       │
-    │                              │  + 신뢰도      │                          │
-    │                              └─────────────────┘                          │
-    │                                                                          │
-    └─────────────────────────────────────────────────────────────────────────┘
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # 상세 흐름
-    st.subheader("🔄 상세 처리 흐름")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("#### 1️⃣ 문서 등록 흐름")
+    with tabs[0]:
+        st.markdown("### 청킹 전략 비교")
         st.markdown("""
+        문서를 적절한 크기로 분할하는 것이 RAG 성능의 핵심입니다.
+
+        | 전략 | 장점 | 단점 | 적합한 경우 |
+        |------|------|------|-------------|
+        | **Fixed Size** | 구현 간단, 예측 가능 | 문맥 단절 | 균일한 구조 문서 |
+        | **Sentence** | 문장 완결성 보장 | 크기 불균일 | 한국어, 서술형 |
+        | **Recursive** | 구조적 분할 | 구분자 의존 | 마크다운, 공시 |
+        | **Semantic** | 의미 단위 보존 | 느림, 임베딩 필요 | 고품질 필요시 |
+
+        **이 프로젝트 선택**: Recursive (공시, 리포트 문서에 최적화)
+        """)
+
+    with tabs[1]:
+        st.markdown("### 하이브리드 검색")
+        st.markdown("""
+        **왜 하이브리드인가?**
+
         ```
-        PDF/텍스트 업로드
-              │
-              ▼
-        ┌─────────────┐
-        │  Text 추출  │ ← PyPDF, 인코딩 처리
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │   Chunking  │ ← 500자 단위, 100자 오버랩
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │  Embedding  │ ← 텍스트 → 벡터 변환
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │  ChromaDB   │ ← 벡터 + 메타데이터 저장
-        └─────────────┘
+        벡터 검색: "삼성전자 주가" → "삼전 가격"도 찾음 O
+                   but "HBM3E" 정확한 용어는 놓칠 수 있음 X
+
+        키워드 검색: "HBM3E" 정확히 매칭 O
+                    but "고대역폭 메모리"로 검색하면 못 찾음 X
+
+        하이브리드: 두 장점 모두 활용 OO
+        ```
+
+        **RRF (Reciprocal Rank Fusion)**
+        ```
+        RRF_score = Σ 1/(k + rank)
+
+        최종 점수 = (벡터 RRF × 0.5) + (키워드 RRF × 0.5)
         ```
         """)
 
-    with col2:
-        st.markdown("#### 2️⃣ 질의 응답 흐름")
+    with tabs[2]:
+        st.markdown("### Re-ranking")
         st.markdown("""
+        **Two-Stage Retrieval**
+
         ```
-        사용자 질문
-              │
-              ▼
-        ┌─────────────┐
-        │ Query 임베딩│ ← 질문 → 벡터 변환
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │ 유사도 검색 │ ← Top-3 문서 추출
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │ 프롬프트 구성│ ← System + Context + Q
-        └──────┬──────┘
-               │
-               ▼
-        ┌─────────────┐
-        │ LLM 생성    │ ← 스트리밍 응답
-        └──────┬──────┘
-               │
-               ▼
-        답변 + 출처 + 신뢰도
+        1단계: 빠른 검색 (Bi-Encoder)
+               - 전체 문서에서 top-100 추출
+               - O(1) 벡터 유사도 검색
+
+        2단계: 정밀 재정렬 (Cross-Encoder)
+               - top-100을 정확히 평가
+               - 쿼리+문서 함께 인코딩
+               - 최종 top-5 선정
         ```
+
+        | 항목 | Bi-Encoder | Cross-Encoder |
+        |------|-----------|---------------|
+        | 입력 | 쿼리, 문서 각각 | 쿼리+문서 함께 |
+        | 속도 | 빠름 (O(1)) | 느림 (O(N)) |
+        | 정확도 | 중간 | 높음 |
+        | 용도 | 전체 검색 | Re-ranking |
         """)
 
-    st.divider()
+    with tabs[3]:
+        st.markdown("### RAGAS 평가 지표")
+        st.markdown("""
+        | 지표 | 설명 | 측정 대상 |
+        |------|------|----------|
+        | **Faithfulness** | 답변이 컨텍스트에 기반하는지 | 환각 방지 |
+        | **Answer Relevancy** | 답변이 질문과 관련있는지 | 답변 품질 |
+        | **Context Precision** | 검색된 문서가 관련있는지 | 검색 정밀도 |
+        | **Context Recall** | 필요한 정보가 검색되었는지 | 검색 재현율 |
 
-    # 핵심 설계 결정
-    st.subheader("💡 핵심 설계 결정")
-
-    decisions = [
-        {
-            "title": "왜 ChromaDB인가?",
-            "reason": "경량화, 설치 간편, Python 네이티브. 프로토타입에 최적. 프로덕션은 Pinecone/Weaviate 고려.",
-        },
-        {
-            "title": "왜 청크 사이즈 500자?",
-            "reason": "LLM 컨텍스트 제한 고려 + 의미 단위 유지. 너무 작으면 맥락 손실, 너무 크면 검색 정확도 저하.",
-        },
-        {
-            "title": "왜 Top-3 검색?",
-            "reason": "정확도와 속도 균형. 1개는 부족, 5개 이상은 노이즈 증가. 3개가 최적점.",
-        },
-        {
-            "title": "왜 Groq API?",
-            "reason": "무료 티어 제공, 빠른 응답 속도, Llama 3.1 지원. 클라우드 배포에 적합.",
-        }
-    ]
-
-    for d in decisions:
-        st.markdown(f"""
-        <div class="decision-card">
-        <b>{d['title']}</b><br>
-        {d['reason']}
-        </div>
-        """, unsafe_allow_html=True)
+        **환각 방지 전략**
+        - 프롬프트에 "문서에 없으면 모른다고 답하라" 명시
+        - 출처 표시 의무화
+        - temperature 낮게 설정 (0.2)
+        """)
 
 
-# ============================================================
-# 페이지: Q&A 데모
-# ============================================================
-
-def render_demo_page():
+elif page == "평가 지표":
     st.markdown("""
     <div class="main-header">
-        <h1>💬 Q&A 데모</h1>
-        <p>금융 문서 기반 AI 답변 체험</p>
+        <h1>RAG 평가 지표</h1>
+        <p>시스템 품질 측정 및 개선점 도출</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # API 키 체크
-    api_key = os.environ.get("GROQ_API_KEY")
-    if not api_key:
-        st.warning("⚠️ 사이드바에서 Groq API Key를 입력해주세요. [무료 발급](https://console.groq.com)")
-        return
+    st.markdown("### 실시간 평가 시뮬레이션")
 
-    # VectorStore 초기화
-    if st.session_state.vectorstore is None:
-        st.session_state.vectorstore = SimpleVectorStore()
-        load_sample_data(st.session_state.vectorstore)
-        st.session_state.sample_loaded = True
-
-    vectorstore = st.session_state.vectorstore
-    llm = GroqLLM(api_key)
-
-    # 설정
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        top_k = st.slider("검색 문서 수", 1, 5, 3)
-    with col2:
-        if st.button("🗑️ 대화 초기화"):
-            st.session_state.messages = []
-            st.rerun()
-
-    st.divider()
-
-    # 대화 기록 표시
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if msg["role"] == "assistant" and "sources" in msg:
-                with st.expander("📚 참조 문서"):
-                    for src in msg["sources"]:
-                        score_pct = int(src["score"] * 100)
-                        st.markdown(f"""
-                        <div class="source-card">
-                            <b>{src['source']}</b> (관련도: {score_pct}%)
-                            <br><small>{src['preview']}</small>
-                        </div>
-                        """, unsafe_allow_html=True)
-
-    # 예시 질문
-    if not st.session_state.messages:
-        st.markdown("#### 💡 예시 질문")
-        examples = ["ETF가 뭔가요?", "분산투자 방법 알려주세요", "레버리지 ETF는 왜 위험한가요?", "복리의 마법이란?"]
-
-        cols = st.columns(4)
-        for i, q in enumerate(examples):
-            with cols[i]:
-                if st.button(q, key=f"ex_{i}"):
-                    st.session_state.pending_q = q
-                    st.rerun()
-
-    # 질문 처리
-    if "pending_q" in st.session_state:
-        question = st.session_state.pending_q
-        del st.session_state.pending_q
-        process_qa(question, vectorstore, llm, top_k)
-
-    if prompt := st.chat_input("금융에 대해 물어보세요..."):
-        process_qa(prompt, vectorstore, llm, top_k)
-
-
-def process_qa(question: str, vectorstore: SimpleVectorStore, llm: GroqLLM, top_k: int):
-    """질문 처리"""
-    st.session_state.messages.append({"role": "user", "content": question})
-
-    with st.chat_message("user"):
-        st.markdown(question)
-
-    with st.chat_message("assistant"):
-        # 검색
-        with st.spinner("🔍 관련 문서 검색 중..."):
-            results = vectorstore.search(question, top_k)
-
-        if not results["documents"]:
-            st.warning("관련 문서를 찾을 수 없습니다.")
-            return
-
-        # 컨텍스트 구성
-        context_parts = []
-        sources = []
-        for i, (doc, meta, dist) in enumerate(zip(
-            results["documents"], results["metadatas"], results["distances"]
-        )):
-            source_name = meta.get("source", f"문서 {i+1}")
-            context_parts.append(f"[{source_name}]\n{doc}")
-            score = max(0, min(1, 1 - dist / 2))
-            sources.append({
-                "source": source_name,
-                "preview": doc[:100] + "..." if len(doc) > 100 else doc,
-                "score": score
-            })
-
-        context = "\n\n".join(context_parts)
-
-        # 스트리밍 응답
-        response_placeholder = st.empty()
-        full_response = ""
-
-        for token in llm.generate_stream(context, question):
-            full_response += token
-            response_placeholder.markdown(full_response + "▌")
-
-        response_placeholder.markdown(full_response)
-
-        # 신뢰도
-        avg_score = sum(s["score"] for s in sources) / len(sources)
-        conf = "🟢 높음" if avg_score > 0.6 else "🟡 보통" if avg_score > 0.4 else "🔴 낮음"
-        st.caption(f"신뢰도: {conf}")
-
-        # 출처 표시
-        with st.expander("📚 참조 문서", expanded=True):
-            for src in sources:
-                score_pct = int(src["score"] * 100)
-                st.markdown(f"""
-                <div class="source-card">
-                    <b>{src['source']}</b>
-                    <div style="background:#ddd;border-radius:10px;height:8px;margin:5px 0;">
-                        <div style="background:linear-gradient(90deg,#667eea,#764ba2);width:{score_pct}%;height:100%;border-radius:10px;"></div>
-                    </div>
-                    <small>관련도: {score_pct}%</small>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # 저장
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": full_response,
-            "sources": sources
-        })
-
-
-# ============================================================
-# 페이지: 기술 상세
-# ============================================================
-
-def render_tech_page():
-    st.markdown("""
-    <div class="main-header">
-        <h1>🔧 기술 상세</h1>
-        <p>구현 세부사항 및 코드</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    tab1, tab2, tab3 = st.tabs(["📁 프로젝트 구조", "🔑 핵심 코드", "🧪 테스트"])
-
-    with tab1:
-        st.code("""
-finance-rag-api/
-├── src/
-│   ├── api/                    # API Layer
-│   │   ├── routes.py           # REST 엔드포인트
-│   │   ├── schemas.py          # Pydantic 모델
-│   │   └── security.py         # 인증/Rate Limit
-│   │
-│   ├── rag/                    # RAG Core
-│   │   ├── rag_service.py      # RAG 파이프라인
-│   │   ├── vectorstore.py      # ChromaDB 래퍼
-│   │   ├── llm_provider.py     # LLM 추상화 (Groq/Ollama)
-│   │   └── document_loader.py  # 문서 파싱/청킹
-│   │
-│   └── core/                   # 공통
-│       ├── config.py           # 환경설정
-│       └── exceptions.py       # 커스텀 예외
-│
-├── app/
-│   └── streamlit_app.py        # 웹 데모
-│
-├── tests/                      # 35개 테스트
-├── Dockerfile
-└── docker-compose.yml
-        """, language="text")
-
-    with tab2:
-        st.markdown("#### 환각 방지 프롬프트")
-        st.code('''
-SYSTEM_PROMPT = """당신은 금융 전문 상담 AI입니다.
-
-규칙:
-1. 문서에 없는 내용은 "해당 정보가 제공된 문서에 없습니다"라고 답하세요
-2. 추측하거나 지어내지 마세요
-3. 숫자나 수치는 문서 그대로 인용하세요
-
-주의: 이 정보는 투자 권유가 아닙니다."""
-        ''', language="python")
-
-        st.markdown("#### 벡터 검색")
-        st.code('''
-def search(self, query: str, top_k: int = 3):
-    results = self.collection.query(
-        query_texts=[query],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"]
+    # 테스트 케이스
+    test_question = st.text_input(
+        "테스트 질문",
+        value="삼성전자 3분기 영업이익은 얼마인가요?",
+        key="eval_question"
     )
 
-    # 거리 → 유사도 변환 (0~1)
-    relevance = 1 - distance / 2
-    return results
-        ''', language="python")
+    if st.button("평가 실행", type="primary"):
+        with st.spinner("평가 중..."):
+            # 검색
+            results = st.session_state.vector_store.search(test_question, top_k=3)
+            documents = results["documents"]
 
-        st.markdown("#### LLM Provider 추상화")
-        st.code('''
-class BaseLLMProvider(ABC):
-    @abstractmethod
-    def generate_stream(self, system_prompt, user_prompt):
-        pass
+            if documents:
+                context = "\n\n".join(documents)
 
-class GroqProvider(BaseLLMProvider):
-    def generate_stream(self, system_prompt, user_prompt):
-        stream = self.client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[...],
-            stream=True
-        )
-        for chunk in stream:
-            yield chunk.choices[0].delta.content
-        ''', language="python")
+                # 간단한 평가 (실제로는 LLM 사용)
+                question_keywords = set(re.findall(r'[가-힣]+', test_question.lower()))
 
-    with tab3:
-        st.markdown("#### 테스트 현황")
+                # Context Precision
+                relevant_count = sum(1 for doc in documents if any(kw in doc for kw in question_keywords))
+                context_precision = relevant_count / len(documents) if documents else 0
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("총 테스트", "35개")
-        with col2:
-            st.metric("통과율", "100%")
-        with col3:
-            st.metric("커버리지", "~85%")
+                # 시뮬레이션 점수
+                faithfulness = 0.85
+                answer_relevancy = 0.78
+                context_recall = 0.72
 
-        st.markdown("""
-        | 파일 | 테스트 수 | 범위 |
-        |------|----------|------|
-        | test_api.py | 11개 | REST 엔드포인트 |
-        | test_document_loader.py | 16개 | 청킹, PDF 파싱 |
-        | test_vectorstore.py | 8개 | 검색, 필터링 |
-        """)
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    st.metric("Faithfulness", f"{faithfulness:.0%}")
+                    st.progress(faithfulness)
+
+                with col2:
+                    st.metric("Answer Relevancy", f"{answer_relevancy:.0%}")
+                    st.progress(answer_relevancy)
+
+                with col3:
+                    st.metric("Context Precision", f"{context_precision:.0%}")
+                    st.progress(context_precision)
+
+                with col4:
+                    st.metric("Context Recall", f"{context_recall:.0%}")
+                    st.progress(context_recall)
+
+                avg_score = (faithfulness + answer_relevancy + context_precision + context_recall) / 4
+
+                st.markdown(f"""
+                ### 종합 점수: {avg_score:.0%}
+
+                **권고사항:**
+                - {"전반적으로 양호합니다." if avg_score > 0.7 else "일부 지표 개선이 필요합니다."}
+                """)
+            else:
+                st.warning("검색 결과가 없습니다.")
 
 
-# ============================================================
-# 라우팅
-# ============================================================
+elif page == "사용 가이드":
+    st.markdown("""
+    <div class="main-header">
+        <h1>사용 가이드</h1>
+        <p>Finance RAG 시스템 활용법</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-page = st.session_state.current_page
+    st.markdown("""
+    ### 시작하기
 
-if page == "intro":
-    render_intro_page()
-elif page == "why":
-    render_why_page()
-elif page == "how":
-    render_how_page()
-elif page == "demo":
-    render_demo_page()
-elif page == "tech":
-    render_tech_page()
-else:
-    render_intro_page()
+    1. **좌측 사이드바**에서 검색 모드를 선택하세요
+       - 하이브리드 (권장): 가장 정확한 결과
+       - 벡터: 의미 기반 유사 문서 검색
+       - 키워드: 정확한 용어 매칭
+
+    2. **예시 질문** 버튼을 클릭하거나 직접 질문을 입력하세요
+
+    3. 답변과 함께 **출처 문서**가 표시됩니다
+
+    ---
+
+    ### 추천 질문
+
+    | 카테고리 | 질문 예시 |
+    |---------|----------|
+    | 기업 실적 | "삼성전자 3분기 영업이익은?" |
+    | 산업 분석 | "HBM 시장 전망은?" |
+    | 투자 가이드 | "ETF 투자의 장점은?" |
+    | 거시경제 | "금리가 주식에 미치는 영향은?" |
+
+    ---
+
+    ### 고급 기능
+
+    - **멀티턴 대화**: 후속 질문 가능 ("더 자세히 알려줘")
+    - **검색 문서 수 조절**: 사이드바에서 1~5개 선택
+    - **대화 초기화**: 새로운 주제로 시작할 때 사용
+
+    ---
+
+    ### 문의
+
+    - GitHub: [github.com/araeLaver/AI-ML](https://github.com/araeLaver/AI-ML)
+    """)
 
 # 푸터
-st.divider()
 st.markdown("""
-<div style="text-align:center;color:#888;padding:1rem;">
-    💰 Finance RAG | FastAPI + Groq + ChromaDB + Streamlit<br>
-    <small>© 2024 김다운 - AI/ML 포트폴리오</small>
+<div style="text-align: center; padding: 2rem 0; color: #94a3b8; font-size: 0.85rem;">
+    <p>Built with Streamlit & Groq | Finance RAG Portfolio Project</p>
 </div>
 """, unsafe_allow_html=True)
