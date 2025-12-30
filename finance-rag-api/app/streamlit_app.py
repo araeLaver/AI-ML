@@ -1,627 +1,442 @@
 # -*- coding: utf-8 -*-
 """
-Finance RAG - Creative Portfolio
-Inspired by bpco.kr
+Finance RAG - Portfolio Demo
+Clean & Stable Design for Streamlit Cloud
 """
 
 import streamlit as st
 import os
-import time
-from typing import List, Dict, Any
-from dataclasses import dataclass
-import re
+import sys
+from pathlib import Path
+
+# 프로젝트 루트 경로 추가
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 # ============================================================
 # 페이지 설정
 # ============================================================
 st.set_page_config(
-    page_title="Finance RAG",
-    page_icon="✦",
+    page_title="Finance RAG | AI 금융 분석",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
 # ============================================================
-# bpco.kr 스타일 CSS
+# 안정적인 CSS 스타일
 # ============================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
-
-/* 전역 리셋 */
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-:root {
-    --bg: #E8E4DF;
-    --bg-light: #F5F3F0;
-    --text-dark: #1a1a1a;
-    --text-gray: #666;
-    --accent: #FF4D00;
-    --border: #ccc;
-}
-
-/* Streamlit 요소 숨김 */
-#MainMenu, footer, header { visibility: hidden; }
-[data-testid="stHeader"] { background: transparent; }
-[data-testid="stSidebar"] { display: none; }
+/* 기본 설정 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 .stApp {
-    background: var(--bg);
-    font-family: 'Noto Sans KR', sans-serif;
-}
-
-.block-container {
-    padding: 0 !important;
-    max-width: 100% !important;
-}
-
-/* ===== 네비게이션 ===== */
-.nav-bar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.5rem 3rem;
-    background: var(--bg);
-    z-index: 1000;
-    border-bottom: 1px solid var(--border);
-}
-
-.nav-logo {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--text-dark);
-    letter-spacing: -0.5px;
-}
-
-.nav-links {
-    display: flex;
-    gap: 2.5rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.85rem;
-}
-
-.nav-link {
-    color: var(--text-dark);
-    text-decoration: none;
-    position: relative;
-}
-
-.nav-link::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 0;
-    width: 0;
-    height: 1px;
-    background: var(--text-dark);
-    transition: width 0.3s ease;
-}
-
-.nav-link:hover::after {
-    width: 100%;
-}
-
-.nav-time {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-gray);
-}
-
-/* ===== 히어로 섹션 ===== */
-.hero {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding: 6rem 2rem 4rem;
-    position: relative;
+}
+
+/* 헤더 숨김 */
+header[data-testid="stHeader"] {
+    background: transparent;
+}
+
+/* 메인 컨테이너 */
+.main-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+/* 히어로 카드 */
+.hero-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 24px;
+    padding: 3rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
     text-align: center;
 }
 
-.hero-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.75rem;
-    letter-spacing: 3px;
-    color: var(--text-gray);
-    text-transform: uppercase;
-    margin-bottom: 2rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.hero-label::before,
-.hero-label::after {
-    content: '✦';
-    font-size: 0.6rem;
+.hero-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 0.5rem 1.5rem;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
 }
 
 .hero-title {
-    font-family: 'Space Mono', monospace;
-    font-size: clamp(3rem, 12vw, 8rem);
+    font-family: 'Inter', sans-serif;
+    font-size: 3rem;
     font-weight: 700;
-    color: var(--text-dark);
-    line-height: 0.95;
+    color: #1a1a2e;
     margin-bottom: 1rem;
-    letter-spacing: -3px;
-}
-
-.hero-title-line {
-    display: block;
-}
-
-.hero-title .outline {
-    -webkit-text-stroke: 1.5px var(--text-dark);
-    -webkit-text-fill-color: transparent;
+    line-height: 1.2;
 }
 
 .hero-subtitle {
-    font-size: 1.1rem;
-    color: var(--text-gray);
-    margin-top: 2rem;
-    max-width: 500px;
-    line-height: 1.8;
+    font-size: 1.2rem;
+    color: #666;
+    margin-bottom: 2rem;
+    line-height: 1.6;
 }
 
-.scroll-hint {
-    position: absolute;
-    bottom: 3rem;
-    font-family: 'Space Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 2px;
-    color: var(--text-gray);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.scroll-arrow {
-    width: 1px;
-    height: 40px;
-    background: linear-gradient(to bottom, var(--text-gray), transparent);
-    animation: scrollDown 1.5s ease-in-out infinite;
-}
-
-@keyframes scrollDown {
-    0%, 100% { transform: translateY(0); opacity: 1; }
-    50% { transform: translateY(10px); opacity: 0.5; }
-}
-
-/* ===== 섹션 공통 ===== */
-.section {
-    padding: 6rem 4rem;
-    border-top: 1px solid var(--border);
-}
-
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 4rem;
-}
-
-.section-num {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-gray);
-}
-
-.section-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.9rem;
-    font-weight: 400;
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    color: var(--text-dark);
-}
-
-/* ===== 서비스 그리드 ===== */
-.services-grid {
+/* 기능 카드 그리드 */
+.features-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
 }
 
-.service-card {
-    background: var(--bg-light);
-    border: 1px solid var(--border);
-    border-radius: 0;
-    padding: 2.5rem 2rem;
-    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-    position: relative;
-    overflow: hidden;
+.feature-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease;
 }
 
-.service-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 3px;
-    background: var(--accent);
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 0.4s ease;
+.feature-card:hover {
+    transform: translateY(-5px);
 }
 
-.service-card:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 20px 40px rgba(0,0,0,0.08);
-}
-
-.service-card:hover::before {
-    transform: scaleX(1);
-}
-
-.service-num {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--accent);
-    margin-bottom: 1.5rem;
-}
-
-.service-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.3rem;
-    font-weight: 700;
-    color: var(--text-dark);
+.feature-icon {
+    font-size: 2.5rem;
     margin-bottom: 1rem;
-    letter-spacing: -0.5px;
 }
 
-.service-desc {
+.feature-title {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 0.5rem;
+}
+
+.feature-desc {
     font-size: 0.9rem;
-    color: var(--text-gray);
-    line-height: 1.7;
-    margin-bottom: 1.5rem;
+    color: #666;
+    line-height: 1.5;
 }
 
-.service-tag {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.7rem;
-    color: var(--text-gray);
-    border: 1px solid var(--border);
-    padding: 0.4rem 0.8rem;
-    display: inline-block;
-}
-
-/* ===== 스탯 섹션 ===== */
-.stats-row {
+/* 스탯 바 */
+.stats-bar {
     display: flex;
     justify-content: space-around;
-    padding: 4rem 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
 }
 
 .stat-item {
     text-align: center;
 }
 
-.stat-num {
-    font-family: 'Space Mono', monospace;
-    font-size: 3.5rem;
+.stat-value {
+    font-family: 'Inter', sans-serif;
+    font-size: 2.5rem;
     font-weight: 700;
-    color: var(--text-dark);
-    line-height: 1;
+    color: #667eea;
 }
 
 .stat-label {
-    font-size: 0.85rem;
-    color: var(--text-gray);
-    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #666;
+    margin-top: 0.25rem;
 }
 
-/* ===== 데모 섹션 ===== */
-.demo-section {
-    padding: 6rem 4rem;
-    background: var(--bg-light);
-    border-top: 1px solid var(--border);
+/* 데모 섹션 */
+.demo-card {
+    background: rgba(255, 255, 255, 0.98);
+    border-radius: 24px;
+    padding: 2rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+    margin-bottom: 2rem;
 }
 
-.demo-container {
-    max-width: 900px;
-    margin: 0 auto;
-}
-
-.demo-window {
-    background: white;
-    border: 1px solid var(--border);
-    overflow: hidden;
-}
-
-.demo-titlebar {
+.demo-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--border);
-    background: #fafafa;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #eee;
 }
 
 .demo-dot {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    border: 1px solid #ddd;
 }
-
-.demo-dot.red { background: #ff5f57; border-color: #e0443e; }
-.demo-dot.yellow { background: #febc2e; border-color: #dea123; }
-.demo-dot.green { background: #28c840; border-color: #1aab29; }
 
 .demo-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-gray);
-    margin-left: 1rem;
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+    color: #666;
+    margin-left: 0.5rem;
 }
 
-.demo-body {
-    padding: 2rem;
-    min-height: 400px;
+/* 채팅 메시지 */
+.chat-container {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 12px;
 }
 
-/* 채팅 스타일 */
-.chat-messages {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-}
-
-.msg {
-    max-width: 80%;
+.user-msg {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
     padding: 1rem 1.25rem;
+    border-radius: 18px 18px 4px 18px;
+    margin-bottom: 1rem;
+    margin-left: 20%;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.ai-msg {
+    background: white;
+    color: #1a1a2e;
+    padding: 1rem 1.25rem;
+    border-radius: 18px 18px 18px 4px;
+    margin-bottom: 1rem;
+    margin-right: 20%;
     font-size: 0.95rem;
     line-height: 1.6;
-}
-
-.msg-user {
-    align-self: flex-end;
-    background: var(--text-dark);
-    color: white;
-    border-radius: 20px 20px 4px 20px;
-}
-
-.msg-ai {
-    align-self: flex-start;
-    background: var(--bg);
-    color: var(--text-dark);
-    border-radius: 20px 20px 20px 4px;
-    border: 1px solid var(--border);
+    border: 1px solid #eee;
 }
 
 .msg-label {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     margin-bottom: 0.5rem;
-    opacity: 0.7;
+    opacity: 0.8;
 }
 
+/* 출처 박스 */
 .sources-box {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    padding: 1rem;
-    margin-top: 1rem;
-    font-size: 0.8rem;
+    background: #f0f4ff;
+    border-left: 3px solid #667eea;
+    padding: 0.75rem 1rem;
+    margin-top: 0.75rem;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.85rem;
 }
 
 .sources-title {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.7rem;
-    letter-spacing: 1px;
-    margin-bottom: 0.5rem;
-    color: var(--accent);
+    font-weight: 600;
+    color: #667eea;
+    margin-bottom: 0.25rem;
+    font-size: 0.75rem;
 }
 
-/* 입력 필드 */
+/* 입력 필드 스타일 */
 .stTextInput > div > div > input {
-    background: white !important;
-    border: 1px solid var(--border) !important;
-    border-radius: 0 !important;
-    padding: 1rem 1.25rem !important;
+    border-radius: 12px !important;
+    border: 2px solid #e0e0e0 !important;
+    padding: 0.75rem 1rem !important;
     font-size: 1rem !important;
-    font-family: 'Noto Sans KR', sans-serif !important;
 }
 
 .stTextInput > div > div > input:focus {
-    border-color: var(--text-dark) !important;
-    box-shadow: none !important;
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1) !important;
 }
 
 .stButton > button {
-    background: var(--text-dark) !important;
+    background: linear-gradient(135deg, #667eea, #764ba2) !important;
     color: white !important;
     border: none !important;
-    border-radius: 0 !important;
-    padding: 1rem 2rem !important;
-    font-family: 'Space Mono', monospace !important;
-    font-size: 0.85rem !important;
-    letter-spacing: 1px !important;
-    transition: all 0.3s ease !important;
+    border-radius: 12px !important;
+    padding: 0.75rem 2rem !important;
+    font-weight: 600 !important;
+    transition: transform 0.2s, box-shadow 0.2s !important;
 }
 
 .stButton > button:hover {
-    background: var(--accent) !important;
-    transform: none !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4) !important;
 }
 
-/* ===== 테크 스택 ===== */
-.tech-list {
+/* 예시 버튼 */
+.example-btn {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.example-btn:hover {
+    border-color: #667eea;
+    color: #667eea;
+}
+
+/* 테크 스택 */
+.tech-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 1rem;
-    margin-top: 2rem;
+    gap: 0.75rem;
+    justify-content: center;
 }
 
 .tech-tag {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.8rem;
-    padding: 0.6rem 1.2rem;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-dark);
-    transition: all 0.3s ease;
+    background: white;
+    color: #667eea;
+    padding: 0.5rem 1rem;
+    border-radius: 50px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    border: 1px solid #e0e0e0;
 }
 
-.tech-tag:hover {
-    background: var(--text-dark);
-    color: white;
-    border-color: var(--text-dark);
-}
-
-/* ===== 푸터 ===== */
+/* 푸터 */
 .footer {
-    padding: 4rem;
-    border-top: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    text-align: center;
+    padding: 2rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.9rem;
 }
 
-.footer-left {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.5rem;
-    font-weight: 700;
-}
-
-.footer-right {
-    font-family: 'Space Mono', monospace;
-    font-size: 0.8rem;
-    color: var(--text-gray);
-}
-
-/* ===== 마퀴 ===== */
-.marquee-container {
-    overflow: hidden;
-    padding: 2rem 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-}
-
-.marquee-track {
-    display: flex;
-    animation: marquee 20s linear infinite;
-}
-
-.marquee-text {
-    font-family: 'Space Mono', monospace;
-    font-size: 4rem;
-    font-weight: 700;
-    color: var(--text-dark);
-    white-space: nowrap;
-    padding-right: 4rem;
-    -webkit-text-stroke: 1px var(--text-dark);
-    -webkit-text-fill-color: transparent;
-}
-
-@keyframes marquee {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
+.footer a {
+    color: white;
+    text-decoration: none;
 }
 
 /* 반응형 */
 @media (max-width: 768px) {
-    .nav-bar { padding: 1rem; }
-    .nav-links { display: none; }
-    .hero-title { font-size: 2.5rem; }
-    .services-grid { grid-template-columns: 1fr; }
-    .stats-row { flex-direction: column; gap: 2rem; }
-    .section { padding: 3rem 1.5rem; }
+    .hero-title { font-size: 2rem; }
+    .stats-bar { flex-direction: column; gap: 1.5rem; }
+    .user-msg { margin-left: 10%; }
+    .ai-msg { margin-right: 10%; }
 }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# 금융 데이터
+# RAG 시스템 초기화
 # ============================================================
-@dataclass
-class FinancialDocument:
-    id: str
-    title: str
-    content: str
-    category: str
-    date: str
+@st.cache_resource
+def init_rag_system():
+    """RAG 시스템 초기화"""
+    try:
+        from src.rag.hybrid_search import HybridSearchEngine
+        from src.rag.llm_client import LLMClient
+        from src.rag.document_loader import DocumentLoader
 
-FINANCIAL_DOCUMENTS = [
-    FinancialDocument(
-        id="samsung_q3_2024",
-        title="삼성전자 2024년 3분기 실적",
-        content="""삼성전자가 2024년 3분기에 영업이익 9조 1,834억원을 기록했다.
-        이는 전년동기대비 274.5% 증가한 수치다. 매출액은 79조 1,024억원으로 17.3% 증가했다.
-        반도체 부문이 실적 개선을 주도했으며, HBM 수요 증가가 주요 요인이다.""",
-        category="실적",
-        date="2024-10-31"
-    ),
-    FinancialDocument(
-        id="fed_rate_2024",
-        title="미국 연준 금리 동결",
-        content="""미국 연방준비제도(Fed)가 2024년 9월 FOMC에서 기준금리를 5.25-5.50%로 동결했다.
-        파월 의장은 인플레이션이 목표치인 2%로 수렴하고 있다고 평가했다.
-        시장에서는 2024년 4분기 중 금리 인하 가능성을 50% 이상으로 전망하고 있다.""",
-        category="금리",
-        date="2024-09-20"
-    ),
-    FinancialDocument(
-        id="nvidia_hbm",
-        title="NVIDIA HBM 수요 급증",
-        content="""NVIDIA의 AI 가속기 수요 급증으로 HBM(고대역폭메모리) 시장이 폭발적으로 성장하고 있다.
-        SK하이닉스가 HBM3E 시장을 선도하고 있으며, 삼성전자도 HBM3E 양산을 시작했다.
-        2024년 HBM 시장 규모는 전년대비 2배 이상 성장할 것으로 예상된다.""",
-        category="반도체",
-        date="2024-08-15"
-    ),
-]
+        # 문서 로드
+        loader = DocumentLoader()
+        docs_path = project_root / "data" / "sample_docs"
 
-# ============================================================
-# 검색 & LLM
-# ============================================================
+        if docs_path.exists():
+            documents = loader.load_directory(str(docs_path))
+        else:
+            documents = []
+
+        # 검색 엔진 초기화
+        search_engine = HybridSearchEngine()
+        if documents:
+            search_engine.add_documents(documents)
+
+        # LLM 클라이언트
+        llm = LLMClient()
+
+        return search_engine, llm, len(documents)
+    except Exception as e:
+        return None, None, 0
+
+# 간단한 폴백 검색
 class SimpleSearch:
-    def __init__(self, documents):
-        self.documents = documents
+    def __init__(self):
+        self.documents = self._load_sample_docs()
 
-    def search(self, query: str, top_k: int = 3):
+    def _load_sample_docs(self):
+        docs = []
+        docs_path = project_root / "data" / "sample_docs"
+        if docs_path.exists():
+            for file in docs_path.glob("*.txt"):
+                try:
+                    content = file.read_text(encoding='utf-8')
+                    docs.append({
+                        'id': file.stem,
+                        'title': file.stem.replace('_', ' ').title(),
+                        'content': content
+                    })
+                except:
+                    pass
+
+        # 기본 문서
+        if not docs:
+            docs = [
+                {
+                    'id': 'samsung_q3',
+                    'title': '삼성전자 2024년 3분기 실적',
+                    'content': '삼성전자가 2024년 3분기에 영업이익 9조 1,834억원을 기록했다. 전년동기대비 274.5% 증가. 매출액 79조 1,024억원으로 17.3% 증가. HBM 수요 증가가 주요 요인.'
+                },
+                {
+                    'id': 'fed_rate',
+                    'title': '미국 연준 금리 정책',
+                    'content': '미국 연준이 2024년 9월 FOMC에서 기준금리를 5.25-5.50%로 동결. 파월 의장은 인플레이션이 2% 목표로 수렴 중이라 평가. 4분기 금리 인하 가능성 50% 이상.'
+                },
+                {
+                    'id': 'hbm_market',
+                    'title': 'HBM 시장 현황',
+                    'content': 'NVIDIA AI 가속기 수요로 HBM 시장 폭발적 성장. SK하이닉스 HBM3E 시장 선도, 시장점유율 53%. 삼성전자 HBM3E 양산 시작. 2024년 시장규모 전년대비 2배 이상 성장 전망.'
+                }
+            ]
+        return docs
+
+    def search(self, query, top_k=3):
+        import re
         query_lower = query.lower()
         keywords = re.findall(r'[가-힣]+|[a-zA-Z]+', query_lower)
 
         results = []
         for doc in self.documents:
-            content_lower = doc.content.lower() + doc.title.lower()
+            content_lower = (doc['content'] + doc['title']).lower()
             score = sum(1 for kw in keywords if kw in content_lower)
             if score > 0:
-                results.append({"doc": doc, "score": score / len(keywords) if keywords else 0})
+                results.append({
+                    'doc': doc,
+                    'score': score / max(len(keywords), 1)
+                })
 
-        results.sort(key=lambda x: x["score"], reverse=True)
+        results.sort(key=lambda x: x['score'], reverse=True)
         return results[:top_k]
 
+# LLM 클라이언트
 class GroqLLM:
     def __init__(self):
         try:
             from groq import Groq
-            from dotenv import load_dotenv
-            load_dotenv()
-            self.client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-            self.available = True
+            api_key = os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY")
+            if api_key:
+                self.client = Groq(api_key=api_key)
+                self.available = True
+            else:
+                self.available = False
         except:
-            self.client = None
             self.available = False
 
-    def generate_stream(self, system_prompt: str, user_prompt: str):
+    def generate(self, system_prompt, user_prompt):
         if not self.available:
-            yield "Groq API 키가 설정되지 않았습니다."
-            return
+            return "⚠️ Groq API 키가 설정되지 않았습니다. Streamlit Cloud Secrets에 GROQ_API_KEY를 추가해주세요."
+
         try:
             response = self.client.chat.completions.create(
                 model="llama-3.1-8b-instant",
@@ -630,263 +445,226 @@ class GroqLLM:
                     {"role": "user", "content": user_prompt}
                 ],
                 temperature=0.7,
-                max_tokens=1024,
-                stream=True
+                max_tokens=1024
             )
-            for chunk in response:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+            return response.choices[0].message.content
         except Exception as e:
-            yield f"오류: {str(e)}"
+            return f"⚠️ 오류 발생: {str(e)}"
 
 # ============================================================
 # 세션 상태
 # ============================================================
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "search" not in st.session_state:
-    st.session_state.search = SimpleSearch(FINANCIAL_DOCUMENTS)
+if "search_engine" not in st.session_state:
+    st.session_state.search_engine = SimpleSearch()
 if "llm" not in st.session_state:
     st.session_state.llm = GroqLLM()
 
 # ============================================================
-# 네비게이션
+# UI 렌더링
 # ============================================================
-st.markdown("""
-<div class="nav-bar">
-    <div class="nav-logo">FINANCE_RAG</div>
-    <div class="nav-links">
-        <a href="#" class="nav-link">HOME</a>
-        <a href="#" class="nav-link">FEATURES</a>
-        <a href="#" class="nav-link">DEMO</a>
-        <a href="#" class="nav-link">GITHUB</a>
-    </div>
-    <div class="nav-time">SEOUL, KR</div>
-</div>
-""", unsafe_allow_html=True)
 
-# ============================================================
 # 히어로 섹션
-# ============================================================
 st.markdown("""
-<div class="hero">
-    <div class="hero-label">AI-Powered Financial Intelligence</div>
-    <h1 class="hero-title">
-        <span class="hero-title-line">FINANCE</span>
-        <span class="hero-title-line outline">RAG_</span>
-    </h1>
+<div class="hero-card">
+    <div class="hero-badge">🚀 AI-Powered RAG System</div>
+    <h1 class="hero-title">Finance RAG</h1>
     <p class="hero-subtitle">
         금융 문서 기반 AI 질의응답 시스템<br>
-        하이브리드 검색과 LLM을 결합한 차세대 분석 도구
+        하이브리드 검색 + LLM으로 정확한 답변과 출처를 제공합니다
     </p>
-    <div class="scroll-hint">
-        <span>SCROLL DOWN</span>
-        <div class="scroll-arrow"></div>
+</div>
+""", unsafe_allow_html=True)
+
+# 기능 카드
+st.markdown("""
+<div class="features-grid">
+    <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <div class="feature-title">하이브리드 검색</div>
+        <div class="feature-desc">Vector + BM25 + RRF 알고리즘으로 의미 기반과 키워드 기반 검색을 결합</div>
+    </div>
+    <div class="feature-card">
+        <div class="feature-icon">🎯</div>
+        <div class="feature-title">Re-Ranking</div>
+        <div class="feature-desc">Cross-Encoder 기반 재정렬로 검색 결과의 정확도를 향상</div>
+    </div>
+    <div class="feature-card">
+        <div class="feature-icon">💬</div>
+        <div class="feature-title">멀티턴 대화</div>
+        <div class="feature-desc">대화 히스토리와 엔티티 추적으로 자연스러운 대화 지원</div>
+    </div>
+    <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <div class="feature-title">출처 추적</div>
+        <div class="feature-desc">모든 답변에 근거 문서와 신뢰도 점수를 함께 제공</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================
-# 마퀴 텍스트
-# ============================================================
-st.markdown("""
-<div class="marquee-container">
-    <div class="marquee-track">
-        <span class="marquee-text">HYBRID SEARCH ✦ RE-RANKING ✦ MULTI-TURN ✦ STREAMING ✦ RAG EVALUATION ✦ </span>
-        <span class="marquee-text">HYBRID SEARCH ✦ RE-RANKING ✦ MULTI-TURN ✦ STREAMING ✦ RAG EVALUATION ✦ </span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ============================================================
-# 스탯 섹션
-# ============================================================
-st.markdown("""
-<div class="stats-row">
+# 스탯 바
+doc_count = len(st.session_state.search_engine.documents)
+st.markdown(f"""
+<div class="stats-bar">
     <div class="stat-item">
-        <div class="stat-num">5+</div>
-        <div class="stat-label">데이터 소스</div>
+        <div class="stat-value">{doc_count}</div>
+        <div class="stat-label">문서 수</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num">3</div>
+        <div class="stat-value">3</div>
         <div class="stat-label">검색 알고리즘</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num">&lt;2s</div>
+        <div class="stat-value">&lt;2s</div>
         <div class="stat-label">응답 시간</div>
     </div>
     <div class="stat-item">
-        <div class="stat-num">∞</div>
-        <div class="stat-label">대화 컨텍스트</div>
+        <div class="stat-value">✓</div>
+        <div class="stat-label">환각 방지</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================
-# 서비스 섹션
-# ============================================================
-st.markdown("""
-<div class="section">
-    <div class="section-header">
-        <span class="section-num">01</span>
-        <span class="section-title">CORE_FEATURES</span>
-    </div>
-
-    <div class="services-grid">
-        <div class="service-card">
-            <div class="service-num">01</div>
-            <div class="service-title">Hybrid_Search</div>
-            <div class="service-desc">
-                벡터 검색(의미 기반)과 BM25(키워드 기반)를
-                RRF 알고리즘으로 결합하여 검색 정확도를 극대화합니다.
-            </div>
-            <span class="service-tag">VECTOR + BM25 + RRF</span>
-        </div>
-
-        <div class="service-card">
-            <div class="service-num">02</div>
-            <div class="service-title">Re_Ranking</div>
-            <div class="service-desc">
-                Cross-Encoder 또는 LLM 기반 재정렬로
-                초기 검색 결과를 정교하게 평가합니다.
-            </div>
-            <span class="service-tag">TWO-STAGE RETRIEVAL</span>
-        </div>
-
-        <div class="service-card">
-            <div class="service-num">03</div>
-            <div class="service-title">Multi_Turn</div>
-            <div class="service-desc">
-                대화 히스토리와 엔티티 추적으로
-                "그 회사"와 같은 대명사를 정확히 해석합니다.
-            </div>
-            <span class="service-tag">CONTEXT MEMORY</span>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# ============================================================
 # 데모 섹션
-# ============================================================
 st.markdown("""
-<div class="demo-section">
-    <div class="section-header">
-        <span class="section-num">02</span>
-        <span class="section-title">LIVE_DEMO</span>
+<div class="demo-card">
+    <div class="demo-header">
+        <span class="demo-dot" style="background: #ff5f57;"></span>
+        <span class="demo-dot" style="background: #febc2e;"></span>
+        <span class="demo-dot" style="background: #28c840;"></span>
+        <span class="demo-title">Finance RAG Terminal</span>
     </div>
-
-    <div class="demo-container">
-        <div class="demo-window">
-            <div class="demo-titlebar">
-                <span class="demo-dot red"></span>
-                <span class="demo-dot yellow"></span>
-                <span class="demo-dot green"></span>
-                <span class="demo-title">finance-rag-terminal</span>
-            </div>
-            <div class="demo-body">
 """, unsafe_allow_html=True)
 
 # 채팅 메시지 표시
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+if not st.session_state.messages:
+    st.markdown("""
+    <div class="ai-msg">
+        <div class="msg-label">AI Assistant</div>
+        안녕하세요! 금융 문서에 대해 질문해주세요.
+        예를 들어 "삼성전자 3분기 실적은?" 또는 "HBM 시장 현황 알려줘" 같은 질문을 해보세요.
+    </div>
+    """, unsafe_allow_html=True)
+
 for msg in st.session_state.messages:
     if msg["role"] == "user":
         st.markdown(f"""
-        <div class="msg msg-user">
-            <div class="msg-label">YOU</div>
+        <div class="user-msg">
+            <div class="msg-label">You</div>
             {msg["content"]}
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(f"""
-        <div class="msg msg-ai">
-            <div class="msg-label">AI</div>
+        <div class="ai-msg">
+            <div class="msg-label">AI Assistant</div>
             {msg["content"]}
         </div>
         """, unsafe_allow_html=True)
 
-        if "sources" in msg and msg["sources"]:
-            sources_html = "<div class='sources-box'><div class='sources-title'>SOURCES</div>"
-            for src in msg["sources"][:2]:
-                sources_html += f"<div>→ {src['title']}</div>"
-            sources_html += "</div>"
+        if msg.get("sources"):
+            sources_html = '<div class="sources-box"><div class="sources-title">📚 참조 문서</div>'
+            for src in msg["sources"][:3]:
+                sources_html += f"<div>• {src}</div>"
+            sources_html += '</div>'
             st.markdown(sources_html, unsafe_allow_html=True)
 
-st.markdown("</div></div></div>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# 입력
+# 입력 영역
 col1, col2 = st.columns([5, 1])
 with col1:
     user_input = st.text_input(
-        "질문",
-        placeholder="예: 삼성전자 3분기 실적이 어떻게 되나요?",
+        "질문 입력",
+        placeholder="금융 관련 질문을 입력하세요...",
         key="user_input",
         label_visibility="collapsed"
     )
 with col2:
-    send = st.button("SEND", use_container_width=True)
+    send_btn = st.button("전송", use_container_width=True)
 
-# 예시 버튼
-st.markdown("</div>", unsafe_allow_html=True)
+# 예시 질문
+st.markdown("**💡 예시 질문:**")
+ex_cols = st.columns(4)
+examples = ["삼성전자 3분기 실적", "HBM 시장 점유율", "연준 금리 전망", "SK하이닉스 현황"]
 
-ex_cols = st.columns(3)
-examples = ["삼성전자 3분기 실적", "HBM 시장 현황", "연준 금리 정책"]
+selected_example = None
 for i, ex in enumerate(examples):
     with ex_cols[i]:
-        if st.button(f"→ {ex}", key=f"ex_{i}"):
-            user_input = ex
+        if st.button(ex, key=f"ex_{i}", use_container_width=True):
+            selected_example = ex
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # 질문 처리
-if (send or user_input) and user_input and user_input.strip():
-    st.session_state.messages.append({"role": "user", "content": user_input})
+query = selected_example or (user_input if send_btn else None)
 
-    results = st.session_state.search.search(user_input)
-    context = "\n\n".join([f"[{r['doc'].title}]\n{r['doc'].content}" for r in results])
+if query and query.strip():
+    st.session_state.messages.append({"role": "user", "content": query})
 
-    system_prompt = "당신은 금융 전문 AI입니다. 제공된 문서를 기반으로 정확하게 답하세요."
-    user_prompt = f"[문서]\n{context}\n\n[질문]\n{user_input}"
+    # 검색
+    results = st.session_state.search_engine.search(query)
 
-    with st.spinner("분석 중..."):
-        full_response = ""
-        placeholder = st.empty()
-        for chunk in st.session_state.llm.generate_stream(system_prompt, user_prompt):
-            full_response += chunk
-            placeholder.markdown(f"<div class='msg msg-ai'>{full_response}</div>", unsafe_allow_html=True)
+    # 컨텍스트 생성
+    if results:
+        context = "\n\n".join([
+            f"[{r['doc']['title']}]\n{r['doc']['content'][:500]}"
+            for r in results
+        ])
+        sources = [r['doc']['title'] for r in results]
+    else:
+        context = "관련 문서를 찾지 못했습니다."
+        sources = []
 
-    sources = [{"title": r["doc"].title} for r in results]
-    st.session_state.messages.append({"role": "assistant", "content": full_response, "sources": sources})
+    # LLM 응답 생성
+    system_prompt = """당신은 금융 전문 AI 어시스턴트입니다.
+제공된 문서를 기반으로 정확하게 답변하세요.
+문서에 없는 정보는 추측하지 말고 "문서에서 해당 정보를 찾을 수 없습니다"라고 답하세요.
+답변은 한국어로 명확하고 간결하게 작성하세요."""
+
+    user_prompt = f"""[참조 문서]
+{context}
+
+[질문]
+{query}
+
+위 문서를 기반으로 질문에 답변해주세요."""
+
+    with st.spinner("🔍 문서 검색 및 분석 중..."):
+        response = st.session_state.llm.generate(system_prompt, user_prompt)
+
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": response,
+        "sources": sources
+    })
+
     st.rerun()
 
-# ============================================================
 # 테크 스택
-# ============================================================
 st.markdown("""
-<div class="section">
-    <div class="section-header">
-        <span class="section-num">03</span>
-        <span class="section-title">TECH_STACK</span>
-    </div>
-
-    <div class="tech-list">
-        <span class="tech-tag">LLaMA 3.1</span>
-        <span class="tech-tag">Groq</span>
-        <span class="tech-tag">Python</span>
-        <span class="tech-tag">Streamlit</span>
-        <span class="tech-tag">BM25</span>
-        <span class="tech-tag">Vector DB</span>
-        <span class="tech-tag">RAGAS</span>
-        <span class="tech-tag">Hybrid Search</span>
+<div style="background: rgba(255,255,255,0.95); border-radius: 16px; padding: 2rem; margin: 2rem 0; text-align: center;">
+    <h3 style="color: #1a1a2e; margin-bottom: 1.5rem;">🛠 Tech Stack</h3>
+    <div class="tech-grid">
+        <span class="tech-tag">🦙 LLaMA 3.1</span>
+        <span class="tech-tag">⚡ Groq</span>
+        <span class="tech-tag">🐍 Python</span>
+        <span class="tech-tag">🎈 Streamlit</span>
+        <span class="tech-tag">🔍 BM25</span>
+        <span class="tech-tag">📦 ChromaDB</span>
+        <span class="tech-tag">🎯 Re-Ranking</span>
+        <span class="tech-tag">📊 RAGAS</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ============================================================
 # 푸터
-# ============================================================
 st.markdown("""
 <div class="footer">
-    <div class="footer-left">FINANCE_RAG ✦</div>
-    <div class="footer-right">
-        Built by 김다운 · AI/ML Portfolio · 2024
-    </div>
+    <p>Built with ❤️ by <strong>김다운</strong></p>
+    <p><a href="https://github.com/araeLaver/AI-ML" target="_blank">GitHub</a> · AI/ML Portfolio · 2024</p>
 </div>
 """, unsafe_allow_html=True)
