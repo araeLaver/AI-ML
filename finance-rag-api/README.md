@@ -32,7 +32,7 @@ LLM은 강력하지만 **환각(Hallucination)** 문제가 있습니다:
 
 ## 라이브 데모
 
-> **Live Demo**: [Finance RAG on Streamlit Cloud](https://finance-rag-demo.streamlit.app)
+> **Live Demo**: [Finance RAG on Streamlit Cloud](https://lffna9osmmgfndbczgk2d5.streamlit.app)
 
 ![Finance RAG Demo](docs/demo-preview.png)
 
