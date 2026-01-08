@@ -1,0 +1,44 @@
+# Fine-tuning Core
+torch>=2.0.0
+transformers>=4.36.0
+datasets>=2.16.0
+accelerate>=0.25.0
+peft>=0.7.0
+trl>=0.7.0
+bitsandbytes>=0.41.0
+
+# Hugging Face
+huggingface-hub>=0.20.0
+safetensors>=0.4.0
+
+# Inference Optimization
+# vllm>=0.2.7  # Optional: GPU required
+llama-cpp-python>=0.2.0  # For GGUF models
+
+# API & Web
+fastapi>=0.109.0
+uvicorn>=0.27.0
+streamlit>=1.30.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.5.0
+pyyaml>=6.0.0
+tqdm>=4.66.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Evaluation
+rouge-score>=0.1.2
+nltk>=3.8.0
+
+# Visualization
+matplotlib>=3.8.0
+plotly>=5.18.0
+tensorboard>=2.15.0
+wandb>=0.16.0
+
+# Development
+pytest>=8.0.0
+black>=24.0.0
+ruff>=0.1.0

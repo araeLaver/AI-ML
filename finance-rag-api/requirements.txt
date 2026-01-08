@@ -33,3 +33,9 @@ prometheus-client>=0.19.0
 
 # Web Demo
 streamlit>=1.30.0
+
+# Real-time Financial Data
+yfinance>=0.2.36
+
+# Chart Visualization
+plotly>=5.18.0

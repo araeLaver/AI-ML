@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-detector-service
+  labels:
+    app: fraud-detector
+spec:
+  type: LoadBalancer
+  selector:
+    app: fraud-detector
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8000
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraud-detector-internal
+  labels:
+    app: fraud-detector
+spec:
+  type: ClusterIP
+  selector:
+    app: fraud-detector
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+---
+# Ingress for external access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fraud-detector-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: fraud-detector.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: fraud-detector-service
+            port:
+              number: 80

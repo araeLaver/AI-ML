@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # ML API 서비스
+  ml-api:
+    build: .
+    container_name: fraud-detection-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MODEL_PATH=/app/models/fraud_detector.pkl
+      - PREPROCESSOR_PATH=/app/models/preprocessor.pkl
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+      - THRESHOLD=0.5
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    depends_on:
+      - mlflow
+    networks:
+      - mlops-network
+    restart: unless-stopped
+
+  # MLflow 서버
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.10.0
+    container_name: mlflow-server
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:///mlflow.db
+      --default-artifact-root /mlflow/artifacts
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - mlops-network
+    restart: unless-stopped
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+    networks:
+      - mlops-network
+    restart: unless-stopped
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - mlops-network
+    restart: unless-stopped
+
+  # Streamlit UI
+  streamlit:
+    build: .
+    container_name: fraud-detection-ui
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://ml-api:8000
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    command: ["streamlit", "run", "app/streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    volumes:
+      - ./app:/app/app
+      - ./models:/app/models
+      - ./data:/app/data
+    depends_on:
+      - ml-api
+    networks:
+      - mlops-network
+    restart: unless-stopped
+
+networks:
+  mlops-network:
+    driver: bridge
+
+volumes:
+  mlflow-data:
+  prometheus-data:
+  grafana-data:
