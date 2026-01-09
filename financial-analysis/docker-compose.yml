@@ -1,0 +1,44 @@
+# Financial Analysis - Docker Compose
+version: '3.8'
+
+services:
+  # Streamlit Demo App
+  streamlit:
+    build: .
+    container_name: financial-analysis-demo
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    restart: unless-stopped
+
+  # FastAPI Server
+  api:
+    build: .
+    container_name: financial-analysis-api
+    command: uvicorn api.server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    restart: unless-stopped
+
+  # Test Runner
+  test:
+    build: .
+    container_name: financial-analysis-test
+    command: pytest tests/ -v
+    environment:
+      - PYTHONPATH=/app
+    profiles:
+      - test

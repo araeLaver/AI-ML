@@ -20,6 +20,8 @@ Step 1+2 통합 프로젝트: 금융 이상거래 탐지 시스템
 financial-analysis/
 ├── app/
 │   └── streamlit_app.py    # 통합 UI
+├── api/
+│   └── server.py           # FastAPI 서버
 ├── src/
 │   ├── data/
 │   │   ├── generator.py     # 샘플 데이터 생성
@@ -31,6 +33,12 @@ financial-analysis/
 │   └── prompts/
 │       ├── templates.py     # 프롬프트 템플릿
 │       └── tools.py         # Function Calling 도구
+├── tests/
+│   ├── conftest.py          # pytest fixtures
+│   ├── test_data.py         # 데이터 모듈 테스트
+│   └── test_ml.py           # ML 모듈 테스트
+├── Dockerfile
+├── docker-compose.yml
 ├── requirements.txt
 └── README.md
 ```
@@ -47,6 +55,36 @@ pip install -r requirements.txt
 ```bash
 # Streamlit UI 실행
 streamlit run app/streamlit_app.py
+
+# FastAPI 서버 실행
+uvicorn api.server:app --reload
+```
+
+## Docker 실행
+
+```bash
+# Streamlit 데모 실행
+docker-compose up streamlit
+
+# API 서버 실행
+docker-compose up api
+
+# 테스트 실행
+docker-compose run test
+
+# 전체 서비스 실행
+docker-compose up -d
+```
+
+## 테스트
+
+```bash
+# 전체 테스트
+pytest tests/ -v
+
+# 특정 모듈 테스트
+pytest tests/test_data.py -v
+pytest tests/test_ml.py -v
 ```
 
 ## 주요 기능

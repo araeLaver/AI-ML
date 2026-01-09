@@ -63,9 +63,9 @@ def _generate_normal_transactions(n: int) -> pd.DataFrame:
     base_time = datetime(2024, 1, 1)
     timestamps = [
         base_time + timedelta(
-            days=np.random.randint(0, 365),
-            hours=np.random.choice(range(6, 23), p=_get_hour_distribution()),
-            minutes=np.random.randint(0, 60)
+            days=int(np.random.randint(0, 365)),
+            hours=int(np.random.choice(range(6, 23), p=_get_hour_distribution())),
+            minutes=int(np.random.randint(0, 60))
         )
         for _ in range(n)
     ]
@@ -136,9 +136,9 @@ def _generate_fraud_transactions(n: int) -> pd.DataFrame:
     base_time = datetime(2024, 1, 1)
     timestamps = [
         base_time + timedelta(
-            days=np.random.randint(0, 365),
-            hours=np.random.choice(range(24), p=_get_fraud_hour_distribution()),
-            minutes=np.random.randint(0, 60)
+            days=int(np.random.randint(0, 365)),
+            hours=int(np.random.choice(range(24), p=_get_fraud_hour_distribution())),
+            minutes=int(np.random.randint(0, 60))
         )
         for _ in range(n)
     ]

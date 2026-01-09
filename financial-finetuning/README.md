@@ -30,29 +30,40 @@ financial-finetuning/
 
 ## 주요 기능
 
-### 1. 금융 도메인 데이터셋
-- 이상거래 탐지 (Fraud Detection)
-- 투자 분석 (Investment Analysis)
-- 금융 상품 설명 (Product Explanation)
-- 리스크 평가 (Risk Assessment)
-- 시장 분석 (Market Analysis)
-- 금융 용어 설명 (Term Explanation)
+### 1. 금융 도메인 데이터셋 (100+ 샘플)
+
+6개 카테고리로 구성된 고품질 한국어 금융 Instruction 데이터셋:
+
+| 카테고리 | 샘플 수 | 설명 |
+|---------|--------|------|
+| 이상거래 탐지 (Fraud Detection) | 15 | 보이스피싱, 카드 도용, 계좌 이상 탐지 |
+| 투자 분석 (Investment Analysis) | 20 | 주식/ETF 분석, 포트폴리오 구성, 섹터 분석 |
+| 금융 상품 설명 (Product Explanation) | 16 | 예금, 펀드, ELS, 보험 상품 설명 |
+| 리스크 평가 (Risk Assessment) | 15 | VaR, 신용리스크, 유동성 리스크 분석 |
+| 시장 분석 (Market Analysis) | 17 | 금리, 환율, 경기 사이클 분석 |
+| 금융 용어 설명 (Term Explanation) | 17 | PER, ROE, 듀레이션 등 용어 해설 |
 
 ### 2. LoRA/QLoRA Fine-tuning
 - Parameter-Efficient Fine-Tuning (PEFT)
 - 4-bit 양자화 (QLoRA)
 - Hugging Face Transformers 통합
 - TRL SFTTrainer 활용
+- Early Stopping 및 체크포인트 저장
+- 학습 로그 및 메트릭 추적
 
 ### 3. 추론 API
 - FastAPI 기반 REST API
 - 스트리밍 응답 지원
-- 금융 특화 엔드포인트
+- 금융 특화 엔드포인트 (이상거래, 투자분석, 상품설명)
+- Pydantic 기반 요청/응답 검증
+- Thread-safe 추론 엔진
+- LRU 캐싱 및 에러 핸들링
 
 ### 4. 데모 UI
 - Streamlit 기반 인터랙티브 UI
-- 데이터셋 탐색
+- 데이터셋 탐색 및 통계
 - 실시간 추론 테스트
+- 세션 상태 관리 및 결과 내보내기
 
 ## 설치
 
@@ -191,6 +202,25 @@ training:
 - `beomi/llama-2-ko-7b`
 - `Qwen/Qwen2.5-7B-Instruct`
 - `mistralai/Mistral-7B-Instruct-v0.2`
+
+## Docker 실행
+
+```bash
+# GPU 환경 - Streamlit 데모
+docker-compose up streamlit
+
+# CPU 환경 - Streamlit 데모 (개발/테스트용)
+docker-compose --profile cpu up streamlit-cpu
+
+# API 서버 (GPU 필요)
+docker-compose up api
+
+# 학습 실행 (GPU 필요)
+docker-compose --profile train up train
+
+# 테스트 실행
+docker-compose --profile test run test
+```
 
 ## 테스트
 

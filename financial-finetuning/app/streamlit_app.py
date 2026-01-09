@@ -1,6 +1,12 @@
 # Streamlit Demo UI
 """
 Financial LLM Fine-tuning Demo
+
+Features:
+- 세션 상태 관리
+- 대화 히스토리
+- 결과 내보내기 (JSON/Markdown)
+- 에러 핸들링
 """
 
 import streamlit as st
@@ -9,12 +15,81 @@ import json
 import sys
 import os
 from pathlib import Path
+from datetime import datetime
+from typing import Optional, Dict, Any, List
 
 # 프로젝트 루트 추가
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.data import FINANCIAL_INSTRUCTIONS, FinancialInstructionDataset
+
+
+def init_session_state():
+    """세션 상태 초기화"""
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "api_url" not in st.session_state:
+        st.session_state.api_url = "http://localhost:8000"
+    if "model_loaded" not in st.session_state:
+        st.session_state.model_loaded = False
+    if "current_result" not in st.session_state:
+        st.session_state.current_result = None
+    if "export_history" not in st.session_state:
+        st.session_state.export_history = []
+
+
+def add_to_history(query_type: str, request: Dict, response: Dict):
+    """대화 히스토리에 추가"""
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "type": query_type,
+        "request": request,
+        "response": response,
+    }
+    st.session_state.chat_history.append(entry)
+    st.session_state.export_history.append(entry)
+
+
+def export_to_json() -> str:
+    """히스토리를 JSON으로 내보내기"""
+    export_data = {
+        "exported_at": datetime.now().isoformat(),
+        "total_queries": len(st.session_state.export_history),
+        "history": st.session_state.export_history,
+    }
+    return json.dumps(export_data, ensure_ascii=False, indent=2)
+
+
+def export_to_markdown() -> str:
+    """히스토리를 Markdown으로 내보내기"""
+    lines = [
+        "# Financial LLM Analysis Report",
+        f"\n**Generated at:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"\n**Total Queries:** {len(st.session_state.export_history)}",
+        "\n---\n",
+    ]
+
+    for i, entry in enumerate(st.session_state.export_history, 1):
+        lines.append(f"## Query {i}: {entry['type']}")
+        lines.append(f"\n**Time:** {entry['timestamp']}")
+        lines.append(f"\n### Request")
+        lines.append(f"```json\n{json.dumps(entry['request'], ensure_ascii=False, indent=2)}\n```")
+        lines.append(f"\n### Response")
+
+        if isinstance(entry['response'], dict):
+            if 'analysis' in entry['response']:
+                lines.append(f"\n{entry['response']['analysis']}")
+            elif 'explanation' in entry['response']:
+                lines.append(f"\n{entry['response']['explanation']}")
+            elif 'response' in entry['response']:
+                lines.append(f"\n{entry['response']['response']}")
+        else:
+            lines.append(f"\n{entry['response']}")
+
+        lines.append("\n---\n")
+
+    return "\n".join(lines)
 
 # 페이지 설정
 st.set_page_config(
@@ -92,12 +167,68 @@ st.markdown("""
 
 
 def main():
+    # 세션 상태 초기화
+    init_session_state()
+
     # 헤더
     st.markdown('<p class="main-header">💰 Financial LLM Fine-tuning</p>', unsafe_allow_html=True)
     st.markdown(
         '<p class="sub-header">금융 도메인 특화 LLM 파인튜닝 데모 - LoRA/QLoRA 기반</p>',
         unsafe_allow_html=True
     )
+
+    # 사이드바 - API 설정 및 내보내기
+    with st.sidebar:
+        st.header("Settings")
+        st.session_state.api_url = st.text_input(
+            "API Server URL",
+            value=st.session_state.api_url
+        )
+
+        # 서버 상태 확인
+        if st.button("Check Server"):
+            check_server_status()
+
+        st.divider()
+
+        # 내보내기 섹션
+        st.header("Export Results")
+        if len(st.session_state.export_history) > 0:
+            st.write(f"Total queries: {len(st.session_state.export_history)}")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                json_data = export_to_json()
+                st.download_button(
+                    label="JSON",
+                    data=json_data,
+                    file_name=f"financial_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                )
+            with col2:
+                md_data = export_to_markdown()
+                st.download_button(
+                    label="Markdown",
+                    data=md_data,
+                    file_name=f"financial_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                    mime="text/markdown",
+                )
+
+            if st.button("Clear History"):
+                st.session_state.export_history = []
+                st.session_state.chat_history = []
+                st.rerun()
+        else:
+            st.info("No queries yet")
+
+        st.divider()
+
+        # 히스토리 표시
+        if len(st.session_state.chat_history) > 0:
+            st.header("Recent History")
+            for entry in reversed(st.session_state.chat_history[-5:]):
+                with st.expander(f"{entry['type']} - {entry['timestamp'][:16]}"):
+                    st.json(entry['request'])
 
     # 탭 구성
     tab1, tab2, tab3, tab4 = st.tabs([
@@ -122,6 +253,28 @@ def main():
     # 탭 4: 학습 모니터링
     with tab4:
         render_monitoring_tab()
+
+
+def check_server_status():
+    """서버 상태 확인"""
+    try:
+        response = requests.get(
+            f"{st.session_state.api_url}/health",
+            timeout=5
+        )
+        if response.status_code == 200:
+            data = response.json()
+            st.session_state.model_loaded = data.get("model_loaded", False)
+            if data.get("model_loaded"):
+                st.success("Server: Connected, Model: Loaded")
+            else:
+                st.warning("Server: Connected, Model: Not Loaded")
+        else:
+            st.error(f"Server Error: {response.status_code}")
+    except requests.exceptions.ConnectionError:
+        st.error("Cannot connect to server")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 
 def render_dataset_tab():
@@ -295,26 +448,16 @@ def render_inference_tab():
     """추론 테스트 탭 렌더링"""
     st.subheader("🤖 추론 테스트")
 
-    # API 서버 상태 확인
-    api_url = st.text_input("API 서버 URL", value="http://localhost:8000")
-
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        if st.button("서버 상태 확인"):
-            try:
-                response = requests.get(f"{api_url}/health", timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    if data.get("model_loaded"):
-                        st.success("✅ 모델 로드됨")
-                    else:
-                        st.warning("⚠️ 모델 미로드")
-                else:
-                    st.error("❌ 서버 오류")
-            except requests.exceptions.ConnectionError:
-                st.error("❌ 서버 연결 실패")
-            except Exception as e:
-                st.error(f"❌ 오류: {e}")
+    # API 서버 상태 표시
+    api_url = st.session_state.api_url
+    status_col1, status_col2 = st.columns([3, 1])
+    with status_col1:
+        st.info(f"API Server: {api_url}")
+    with status_col2:
+        if st.session_state.model_loaded:
+            st.success("Model Loaded")
+        else:
+            st.warning("Model Not Loaded")
 
     st.markdown("---")
 
@@ -375,36 +518,69 @@ def render_inference_tab():
 
     # 생성 버튼
     if st.button("🎯 응답 생성", type="primary"):
+        request_data = {
+            "instruction": instruction,
+            "input_text": input_text,
+            "temperature": temperature,
+            "top_p": top_p,
+            "top_k": top_k,
+            "max_new_tokens": max_tokens,
+            "repetition_penalty": repetition_penalty,
+        }
+
         with st.spinner("응답 생성 중..."):
             try:
                 response = requests.post(
                     f"{api_url}/generate",
-                    json={
-                        "instruction": instruction,
-                        "input_text": input_text,
-                        "temperature": temperature,
-                        "top_p": top_p,
-                        "top_k": top_k,
-                        "max_new_tokens": max_tokens,
-                        "repetition_penalty": repetition_penalty,
-                    },
+                    json=request_data,
                     timeout=120,
                 )
 
                 if response.status_code == 200:
                     data = response.json()
+                    st.session_state.current_result = data
+
+                    # 히스토리에 추가
+                    add_to_history(inference_type, request_data, data)
+
                     st.markdown("### 📝 생성된 응답")
                     st.markdown(f"""
                     <div class="output-box">
                         {data['response']}
                     </div>
                     """, unsafe_allow_html=True)
+
+                    # 생성 시간 표시
+                    if data.get('generation_time_ms'):
+                        st.caption(f"Generation time: {data['generation_time_ms']:.2f}ms")
+
+                    # 결과 내보내기 버튼
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            "Download JSON",
+                            data=json.dumps(data, ensure_ascii=False, indent=2),
+                            file_name=f"result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json",
+                        )
+                    with col2:
+                        md_content = f"# {inference_type} Result\n\n**Request:**\n```json\n{json.dumps(request_data, ensure_ascii=False, indent=2)}\n```\n\n**Response:**\n{data['response']}"
+                        st.download_button(
+                            "Download Markdown",
+                            data=md_content,
+                            file_name=f"result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                            mime="text/markdown",
+                        )
                 else:
                     st.error(f"API 오류: {response.status_code}")
+                    if response.text:
+                        st.code(response.text)
 
             except requests.exceptions.ConnectionError:
                 st.error("API 서버에 연결할 수 없습니다. 서버를 먼저 실행해주세요.")
                 st.code("python api/server.py")
+            except requests.exceptions.Timeout:
+                st.error("요청 시간이 초과되었습니다. 더 짧은 max_tokens를 시도해보세요.")
             except Exception as e:
                 st.error(f"오류 발생: {e}")
 

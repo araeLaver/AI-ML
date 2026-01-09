@@ -20,7 +20,8 @@ class TestFinancialInstructions:
         from src.data.financial_instructions import FINANCIAL_INSTRUCTIONS
 
         assert FINANCIAL_INSTRUCTIONS is not None
-        assert len(FINANCIAL_INSTRUCTIONS) > 0
+        assert len(FINANCIAL_INSTRUCTIONS) >= 100, "최소 100개 이상의 샘플 필요"
+        print(f"Total instructions: {len(FINANCIAL_INSTRUCTIONS)}")
 
     def test_instruction_structure(self):
         """Instruction 데이터 구조 테스트"""
@@ -39,8 +40,31 @@ class TestFinancialInstructions:
         categories = set(item.get("category") for item in FINANCIAL_INSTRUCTIONS)
         categories.discard(None)
 
-        assert len(categories) > 0, "최소 하나의 카테고리 필요"
+        expected_categories = {
+            "fraud_detection",
+            "investment_analysis",
+            "product_explanation",
+            "risk_assessment",
+            "market_analysis",
+            "term_explanation",
+        }
+
+        assert len(categories) >= 6, "6개 카테고리 필요"
+        assert categories == expected_categories, f"카테고리 불일치: {categories}"
         print(f"Found categories: {categories}")
+
+    def test_category_distribution(self):
+        """카테고리별 최소 샘플 수 테스트"""
+        from src.data.financial_instructions import get_dataset_stats
+
+        stats = get_dataset_stats()
+
+        # 각 카테고리별 최소 10개 이상
+        for category, count in stats.items():
+            if category != "total":
+                assert count >= 10, f"{category} 카테고리에 최소 10개 샘플 필요 (현재: {count})"
+
+        print(f"Category distribution: {stats}")
 
 
 class TestFormatInstruction:

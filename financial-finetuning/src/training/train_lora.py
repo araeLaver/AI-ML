@@ -1,11 +1,20 @@
 # LoRA/QLoRA Training Pipeline
 """
 금융 도메인 LLM Fine-tuning을 위한 LoRA 학습 파이프라인
+
+Features:
+- LoRA/QLoRA 기반 효율적 학습
+- Early Stopping 지원
+- 체크포인트 저장 및 복원
+- 학습 메트릭 추적
 """
 
 import os
+import json
+import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Callable
+from datetime import datetime
 
 import yaml
 import torch
@@ -14,6 +23,10 @@ from transformers import (
     AutoTokenizer,
     BitsAndBytesConfig,
     TrainingArguments,
+    EarlyStoppingCallback,
+    TrainerCallback,
+    TrainerState,
+    TrainerControl,
 )
 from peft import (
     LoraConfig,
@@ -25,11 +38,62 @@ from trl import SFTTrainer
 
 from ..data import FinancialInstructionDataset
 
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+class TrainingMetricsCallback(TrainerCallback):
+    """학습 메트릭을 추적하는 콜백"""
+
+    def __init__(self, log_dir: str = "./outputs/logs"):
+        self.log_dir = Path(log_dir)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+        self.metrics_history = []
+        self.start_time = None
+
+    def on_train_begin(self, args, state: TrainerState, control: TrainerControl, **kwargs):
+        self.start_time = datetime.now()
+        logger.info(f"Training started at {self.start_time}")
+
+    def on_log(self, args, state: TrainerState, control: TrainerControl, logs=None, **kwargs):
+        if logs:
+            log_entry = {
+                "step": state.global_step,
+                "epoch": state.epoch,
+                **logs,
+                "timestamp": datetime.now().isoformat(),
+            }
+            self.metrics_history.append(log_entry)
+
+    def on_train_end(self, args, state: TrainerState, control: TrainerControl, **kwargs):
+        end_time = datetime.now()
+        duration = end_time - self.start_time if self.start_time else None
+
+        # 메트릭 저장
+        metrics_file = self.log_dir / "training_metrics.json"
+        with open(metrics_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "start_time": self.start_time.isoformat() if self.start_time else None,
+                "end_time": end_time.isoformat(),
+                "duration_seconds": duration.total_seconds() if duration else None,
+                "total_steps": state.global_step,
+                "metrics": self.metrics_history,
+            }, f, indent=2, ensure_ascii=False)
+
+        logger.info(f"Training completed. Duration: {duration}")
+        logger.info(f"Metrics saved to {metrics_file}")
+
 
 def load_training_config(config_path: str = "configs/training_config.yaml") -> Dict[str, Any]:
     """YAML 설정 파일 로드"""
+    config_path = Path(config_path)
+    if not config_path.exists():
+        logger.warning(f"Config file not found: {config_path}. Using defaults.")
+        return {}
+
     with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        return yaml.safe_load(f) or {}
 
 
 class FinancialLoRATrainer:
@@ -47,11 +111,15 @@ class FinancialLoRATrainer:
         self,
         config_path: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
+        early_stopping_patience: int = 3,
+        early_stopping_threshold: float = 0.01,
     ):
         """
         Args:
             config_path: 설정 파일 경로
             config: 직접 전달할 설정 딕셔너리
+            early_stopping_patience: Early stopping patience (epochs)
+            early_stopping_threshold: 개선 임계값
         """
         if config is not None:
             self.config = config
@@ -64,6 +132,14 @@ class FinancialLoRATrainer:
         self.tokenizer = None
         self.trainer = None
         self.dataset = None
+
+        # Early stopping 설정
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_threshold = early_stopping_threshold
+
+        # 학습 상태
+        self.training_complete = False
+        self.best_metric = None
 
     def _get_quantization_config(self) -> Optional[BitsAndBytesConfig]:
         """양자화 설정 생성"""
@@ -100,9 +176,10 @@ class FinancialLoRATrainer:
     def _get_training_arguments(self) -> TrainingArguments:
         """학습 인자 생성"""
         train_config = self.config.get("training", {})
+        output_dir = train_config.get("output_dir", "./outputs")
 
         return TrainingArguments(
-            output_dir=train_config.get("output_dir", "./outputs"),
+            output_dir=output_dir,
             num_train_epochs=train_config.get("num_train_epochs", 3),
             per_device_train_batch_size=train_config.get("per_device_train_batch_size", 4),
             per_device_eval_batch_size=train_config.get("per_device_eval_batch_size", 4),
@@ -124,6 +201,11 @@ class FinancialLoRATrainer:
             gradient_checkpointing=True,
             max_grad_norm=0.3,
             group_by_length=True,
+            # Early stopping 관련 설정
+            load_best_model_at_end=True,
+            metric_for_best_model="eval_loss",
+            greater_is_better=False,
+            save_total_limit=3,  # 최대 3개 체크포인트 유지
         )
 
     def setup_model(self):
@@ -199,12 +281,28 @@ class FinancialLoRATrainer:
         self.setup_dataset(data_path)
         return self
 
-    def train(self):
-        """모델 학습 실행"""
+    def train(self, resume_from_checkpoint: Optional[str] = None):
+        """
+        모델 학습 실행
+
+        Args:
+            resume_from_checkpoint: 체크포인트에서 재개할 경로
+        """
         if self.model is None or self.dataset is None:
             raise RuntimeError("Call setup() before training")
 
         model_config = self.config.get("model", {})
+        train_config = self.config.get("training", {})
+        output_dir = train_config.get("output_dir", "./outputs")
+
+        # 콜백 설정
+        callbacks = [
+            TrainingMetricsCallback(log_dir=f"{output_dir}/logs"),
+            EarlyStoppingCallback(
+                early_stopping_patience=self.early_stopping_patience,
+                early_stopping_threshold=self.early_stopping_threshold,
+            ),
+        ]
 
         # SFTTrainer 설정
         self.trainer = SFTTrainer(
@@ -216,15 +314,38 @@ class FinancialLoRATrainer:
             max_seq_length=model_config.get("max_seq_length", 2048),
             dataset_text_field="text",
             packing=False,
+            callbacks=callbacks,
         )
 
-        print("\nStarting training...")
-        self.trainer.train()
+        logger.info("Starting training...")
+        logger.info(f"  - Training samples: {len(self.dataset.get_train_dataset())}")
+        logger.info(f"  - Eval samples: {len(self.dataset.get_eval_dataset())}")
+        logger.info(f"  - Early stopping patience: {self.early_stopping_patience}")
+
+        try:
+            self.trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+            self.training_complete = True
+            self.best_metric = self.trainer.state.best_metric
+            logger.info(f"Training completed. Best eval loss: {self.best_metric}")
+        except KeyboardInterrupt:
+            logger.warning("Training interrupted by user")
+            self.training_complete = False
+        except Exception as e:
+            logger.error(f"Training failed: {e}")
+            raise
 
         return self
 
-    def save_model(self, output_dir: Optional[str] = None):
-        """학습된 모델 저장"""
+    def save_model(self, output_dir: Optional[str] = None) -> str:
+        """
+        학습된 모델 저장
+
+        저장 내용:
+        - LoRA 어댑터 가중치
+        - 토크나이저
+        - 학습 설정
+        - 학습 상태 및 메트릭
+        """
         if self.trainer is None:
             raise RuntimeError("No trained model to save")
 
@@ -233,10 +354,34 @@ class FinancialLoRATrainer:
 
         # LoRA 어댑터 저장
         adapter_path = output_path / "lora_adapter"
+        adapter_path.mkdir(parents=True, exist_ok=True)
+
         self.trainer.model.save_pretrained(adapter_path)
         self.tokenizer.save_pretrained(adapter_path)
 
-        print(f"\nModel saved to: {adapter_path}")
+        # 학습 설정 저장
+        config_save_path = adapter_path / "training_config.json"
+        with open(config_save_path, "w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2, ensure_ascii=False)
+
+        # 학습 상태 저장
+        training_state = {
+            "training_complete": self.training_complete,
+            "best_metric": self.best_metric,
+            "base_model": self.config.get("model", {}).get("name", "unknown"),
+            "saved_at": datetime.now().isoformat(),
+            "total_steps": self.trainer.state.global_step if self.trainer.state else None,
+            "epochs_trained": self.trainer.state.epoch if self.trainer.state else None,
+        }
+
+        state_path = adapter_path / "training_state.json"
+        with open(state_path, "w", encoding="utf-8") as f:
+            json.dump(training_state, f, indent=2, ensure_ascii=False)
+
+        logger.info(f"Model saved to: {adapter_path}")
+        logger.info(f"  - Adapter weights: {adapter_path}")
+        logger.info(f"  - Training config: {config_save_path}")
+        logger.info(f"  - Training state: {state_path}")
 
         return str(adapter_path)
 

@@ -1,126 +1,203 @@
-# AI/ML 학습 & 포트폴리오
+# AI/ML 학습 로드맵 & 포트폴리오
 
-백엔드 개발자의 AI/ML 전환을 위한 학습 자료와 실전 프로젝트입니다.
+백엔드 개발자의 AI/ML 전환을 위한 6단계 학습 로드맵과 실전 프로젝트입니다.
 
-## 프로젝트 구성
+## 프로젝트 구조
 
 ```
 AI-ML/
-├── docs/                # 학습 로드맵 및 단계별 가이드
-├── finance-rag-api/     # RAG 기반 금융 Q&A 시스템 (핵심 프로젝트)
-└── portfolio/           # 포트폴리오 웹사이트 (Next.js)
+├── financial-analysis/     # Step 1-2: ML + LLM 기초
+├── finance-rag-api/        # Step 3: RAG 시스템
+├── code-review-agent/      # Step 4: AI Agent
+├── mlops-pipeline/         # Step 5: MLOps 파이프라인
+├── financial-finetuning/   # Step 6: LLM Fine-tuning
+├── docs/                   # 학습 가이드
+└── portfolio/              # 포트폴리오 웹사이트
 ```
 
-## 핵심 프로젝트: Finance RAG API
+## 학습 로드맵 (6단계)
 
-금융 문서 기반 **RAG (Retrieval-Augmented Generation)** Q&A 시스템
+| Step | 프로젝트 | 핵심 기술 | 상태 |
+|------|---------|----------|------|
+| 1-2 | [financial-analysis](./financial-analysis/) | NumPy, Pandas, scikit-learn, LLM API | 완료 |
+| 3 | [finance-rag-api](./finance-rag-api/) | RAG, ChromaDB, Ollama | 완료 |
+| 4 | [code-review-agent](./code-review-agent/) | AI Agent, ReAct, LangGraph | 완료 |
+| 5 | [mlops-pipeline](./mlops-pipeline/) | DVC, MLflow, Docker, CI/CD | 완료 |
+| 6 | [financial-finetuning](./financial-finetuning/) | LoRA, QLoRA, PEFT | 완료 |
 
-### 왜 만들었나?
+---
 
-LLM의 환각(Hallucination) 문제를 해결하기 위해 RAG 패턴을 적용했습니다.
-금융 도메인은 잘못된 정보가 실제 손실로 이어질 수 있어, 검증된 문서 기반 답변이 필수입니다.
+## Step 1-2: Financial Analysis (ML + LLM)
+
+금융 이상거래 탐지 시스템 - ML 모델과 LLM을 결합한 분석 플랫폼
 
 ### 주요 기능
+- NumPy/Pandas 기반 금융 데이터 전처리
+- scikit-learn ML 이상거래 탐지 (Random Forest, Isolation Forest)
+- OpenAI/Claude API 연동
+- Zero-shot, Few-shot, Chain-of-Thought 프롬프트
+- Function Calling (Tool Use)
 
-- 금융 문서 검색 기반 Q&A (환각 방지)
-- PDF/텍스트 파일 업로드 및 자동 청킹
-- 답변 출처와 신뢰도 점수 제공
-- 스트리밍 응답 지원
-- Streamlit 웹 데모
+### 빠른 시작
+```bash
+cd financial-analysis
+pip install -r requirements.txt
+streamlit run app/streamlit_app.py
+# 또는 Docker
+docker-compose up streamlit
+```
 
-### 기술 스택
+---
 
-| 구분 | 기술 |
-|------|------|
-| Backend | FastAPI, Python 3.11 |
-| LLM | Ollama (llama3.2) |
-| Vector DB | ChromaDB |
-| Frontend | Streamlit |
-| DevOps | Docker, pytest |
+## Step 3: Finance RAG API
+
+금융 문서 기반 RAG Q&A 시스템 - LLM 환각 방지
+
+### 주요 기능
+- 문서 검색 기반 Q&A (환각 방지)
+- PDF/텍스트 업로드 및 자동 청킹
+- 답변 출처와 신뢰도 점수
+- 스트리밍 응답
 
 ### 아키텍처
-
 ```
-User → Streamlit/Swagger → FastAPI → RAG Service → Ollama LLM
-                                          ↓
-                                     ChromaDB (Vector Store)
+User → Streamlit → FastAPI → RAG Service → Ollama LLM
+                                    ↓
+                               ChromaDB
 ```
 
 ### 빠른 시작
-
 ```bash
 cd finance-rag-api
-
-# 환경 설정
-python -m venv venv
-source venv/bin/activate  # Windows: .\venv\Scripts\activate
 pip install -r requirements.txt
-
-# Ollama 모델 준비
 ollama pull llama3.2
-
-# 서버 실행
-uvicorn src.main:app --reload --port 8000
-
-# 웹 데모 실행
+uvicorn src.main:app --reload
+# 웹 데모
 streamlit run app/streamlit_app.py
 ```
 
-### API 엔드포인트
+---
 
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| POST | `/api/v1/query` | RAG 질의 |
-| POST | `/api/v1/upload` | 문서 업로드 |
-| GET | `/api/v1/documents` | 문서 목록 |
-| GET | `/api/v1/health` | 헬스체크 |
+## Step 4: Code Review Agent
 
-### 테스트
+AI 기반 코드 리뷰 에이전트 - ReAct 패턴 적용
+
+### 주요 기능
+- GitHub PR 자동 리뷰
+- ReAct 패턴 (Reasoning + Acting)
+- 코드 분석 도구 (AST, Complexity)
+- 보안 취약점 탐지
+
+### 아키텍처
+```
+PR Event → Agent Orchestrator → Tools (AST, Security, Complexity)
+                    ↓
+               LLM Reasoner → Review Comments
+```
+
+### 빠른 시작
+```bash
+cd code-review-agent
+pip install -r requirements.txt
+streamlit run app/demo_app.py
+```
+
+---
+
+## Step 5: MLOps Pipeline
+
+이상거래 탐지 모델 운영 파이프라인 - 엔드투엔드 MLOps
+
+### 주요 기능
+- DVC 데이터 버전 관리
+- MLflow 실험 추적
+- Docker 컨테이너화
+- GitHub Actions CI/CD
+- 모델 레지스트리
+
+### 파이프라인
+```
+Data Versioning (DVC) → Training → Experiment Tracking (MLflow)
+         ↓                                    ↓
+    CI/CD Pipeline ← Model Registry ← Model Evaluation
+```
+
+### 빠른 시작
+```bash
+cd mlops-pipeline
+pip install -r requirements.txt
+# DVC 초기화 및 실행
+dvc repro
+# MLflow UI
+mlflow ui
+```
+
+---
+
+## Step 6: Financial Finetuning
+
+금융 도메인 특화 LLM Fine-tuning - LoRA/QLoRA
+
+### 주요 기능
+- 100+ 금융 도메인 Instruction 데이터셋
+- LoRA/QLoRA (Parameter-Efficient Fine-Tuning)
+- 4-bit 양자화 학습
+- FastAPI 추론 서버
+- 스트리밍 응답
+
+### 데이터셋 카테고리
+| 카테고리 | 샘플 수 |
+|---------|--------|
+| 이상거래 탐지 | 15 |
+| 투자 분석 | 20 |
+| 금융 상품 설명 | 16 |
+| 리스크 평가 | 15 |
+| 시장 분석 | 17 |
+| 금융 용어 설명 | 17 |
+
+### 빠른 시작
+```bash
+cd financial-finetuning
+pip install -r requirements.txt
+# 학습
+python -m src.training.train_lora --config configs/training_config.yaml
+# 데모
+streamlit run app/streamlit_app.py
+# Docker (GPU)
+docker-compose up streamlit
+```
+
+---
+
+## 기술 스택 요약
+
+| 분야 | 기술 |
+|------|------|
+| ML/DL | scikit-learn, PyTorch, Transformers |
+| LLM | OpenAI, Claude, Ollama, PEFT |
+| Vector DB | ChromaDB |
+| MLOps | DVC, MLflow, Docker, GitHub Actions |
+| Backend | FastAPI, Uvicorn |
+| Frontend | Streamlit |
+| Testing | pytest |
+
+## 전체 테스트
 
 ```bash
-pytest tests/ -v  # 35개 테스트 케이스
+# 각 프로젝트별 테스트
+cd financial-analysis && pytest tests/ -v
+cd finance-rag-api && pytest tests/ -v
+cd code-review-agent && pytest tests/ -v
+cd mlops-pipeline && pytest tests/ -v
+cd financial-finetuning && pytest tests/ -v
 ```
 
-## 학습 로드맵
-
-`docs/` 디렉토리에 단계별 학습 가이드가 있습니다.
-
-1. **Step 1**: Python AI 기초 (NumPy, Pandas)
-2. **Step 2**: LLM API & 프롬프트 엔지니어링
-3. **Step 3**: RAG 시스템 구축 ← 현재 프로젝트
-4. **Step 4**: AI Agent 개발
-5. **Step 5**: MLOps
-6. **Step 6**: Fine-tuning
-
-## 기술적 특징
-
-### 환각 방지 설계
-
-```python
-# 프롬프트 엔지니어링으로 문서 외 답변 차단
-"문서에서 찾을 수 없는 정보는
-'제공된 문서에서 관련 정보를 찾을 수 없습니다'라고 답변하세요."
-```
-
-### 신뢰도 점수
-
-벡터 유사도 기반으로 답변 신뢰도를 High/Medium/Low로 분류합니다.
-
-### 계층화된 아키텍처
-
-```
-API Layer (routes, schemas, security)
-    ↓
-Service Layer (rag_service)
-    ↓
-Data Layer (vectorstore, document_loader)
-```
-
-## 개발 환경
+## 요구사항
 
 - Python 3.11+
-- Ollama (로컬 LLM)
 - Docker & Docker Compose
+- Ollama (Step 3)
+- NVIDIA GPU (Step 6 학습 시, 16GB+ VRAM)
 
 ## 라이선스
 

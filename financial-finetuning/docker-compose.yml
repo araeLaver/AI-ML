@@ -1,0 +1,98 @@
+# Financial LLM Fine-tuning - Docker Compose
+version: '3.8'
+
+services:
+  # Streamlit Demo (GPU)
+  streamlit:
+    build: .
+    container_name: financial-finetuning-demo
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ./outputs:/app/outputs
+      - ./cache:/app/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Streamlit Demo (CPU only)
+  streamlit-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: financial-finetuning-demo-cpu
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ./outputs:/app/outputs
+      - ./cache:/app/cache
+    profiles:
+      - cpu
+
+  # FastAPI Inference Server
+  api:
+    build: .
+    container_name: financial-finetuning-api
+    command: uvicorn api.server:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+    volumes:
+      - ./outputs:/app/outputs
+      - ./cache:/app/cache
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # Training Job
+  train:
+    build: .
+    container_name: financial-finetuning-train
+    command: python -m src.training.train_lora --config configs/training_config.yaml
+    environment:
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+    volumes:
+      - ./outputs:/app/outputs
+      - ./cache:/app/cache
+      - ./configs:/app/configs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - train
+
+  # Test Runner
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: financial-finetuning-test
+    command: pytest tests/ -v
+    environment:
+      - PYTHONPATH=/app
+    profiles:
+      - test
