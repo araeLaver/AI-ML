@@ -41,7 +41,7 @@ export default function Hero() {
             <div className="text-slate-400">목표 타임라인</div>
           </div>
           <div className="card-gradient border-gradient rounded-xl p-6">
-            <div className="text-3xl font-bold text-emerald-400 mb-2">1.2억+</div>
+            <div className="text-3xl font-bold text-emerald-400 mb-2">2억+</div>
             <div className="text-slate-400">목표 연봉</div>
           </div>
         </div>
