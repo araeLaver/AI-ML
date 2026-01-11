@@ -188,12 +188,45 @@ mlops-pipeline/
 
 ## Monitoring
 
+### Grafana Dashboard
+
+Docker Compose 실행 시 자동으로 프로비저닝되는 대시보드:
+
+- **URL**: http://localhost:3000
+- **계정**: admin / admin123
+- **대시보드**: MLOps - Fraud Detection
+
+| 패널 | 설명 |
+|------|------|
+| Total Predictions | 총 예측 요청 수 |
+| Fraud Rate | 최근 1000건 기준 이상거래 비율 |
+| P95 Latency | 95 백분위 응답 시간 |
+| Active Connections | 현재 활성 연결 수 |
+| Prediction Rate | 예측 결과별 초당 요청 |
+| Latency Percentiles | P50/P90/P99 응답 시간 추이 |
+| API Request Rate | 엔드포인트별 요청률 |
+| HTTP Status Codes | HTTP 상태 코드 분포 |
+| Latency Heatmap | 레이턴시 분포 히트맵 |
+
 ### Prometheus Metrics
 
 - `fraud_detection_prediction_total`: 총 예측 수
 - `fraud_detection_prediction_latency_seconds`: 예측 지연 시간
 - `fraud_detection_prediction_probability`: 확률 분포
 - `fraud_detection_fraud_rate`: 실시간 이상 거래 비율
+- `fraud_detection_api_requests_total`: API 요청 수
+- `fraud_detection_active_connections`: 활성 연결 수
+
+### Alert Rules
+
+| Alert | 조건 | 심각도 |
+|-------|------|--------|
+| HighFraudRate | Fraud Rate > 30% (5분간) | Critical |
+| HighPredictionLatency | P95 > 500ms (5분간) | Warning |
+| HighAPIErrorRate | 5xx 에러율 > 5% (5분간) | Critical |
+| APIDown | API 1분간 미응답 | Critical |
+| NoPredictions | 10분간 예측 없음 | Warning |
+| PredictionDistributionShift | 확률 분포 급변 | Warning |
 
 ### Drift Detection
 

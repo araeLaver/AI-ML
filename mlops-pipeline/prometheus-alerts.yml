@@ -1,0 +1,66 @@
+groups:
+  - name: fraud_detection_alerts
+    rules:
+      # 높은 Fraud Rate 알림
+      - alert: HighFraudRate
+        expr: fraud_detection_fraud_rate{window="last_1000"} > 0.3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High fraud rate detected"
+          description: "Fraud rate is {{ $value | printf \"%.2f\" }} (threshold: 0.3)"
+
+      # 높은 레이턴시 알림
+      - alert: HighPredictionLatency
+        expr: histogram_quantile(0.95, sum(rate(fraud_detection_prediction_latency_seconds_bucket[5m])) by (le)) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High prediction latency"
+          description: "P95 latency is {{ $value | printf \"%.3f\" }}s (threshold: 0.5s)"
+
+      # API 에러율 알림
+      - alert: HighAPIErrorRate
+        expr: sum(rate(fraud_detection_api_requests_total{status=~"5.."}[5m])) / sum(rate(fraud_detection_api_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High API error rate"
+          description: "Error rate is {{ $value | printf \"%.2f\" }} (threshold: 5%)"
+
+      # API 다운 알림
+      - alert: APIDown
+        expr: up{job="fraud-detection-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fraud Detection API is down"
+          description: "The API has been unreachable for more than 1 minute"
+
+      # 예측 요청 없음 알림
+      - alert: NoPredictions
+        expr: sum(rate(fraud_detection_prediction_total[10m])) == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No predictions in the last 10 minutes"
+          description: "The service might not be receiving traffic"
+
+      # 모델 드리프트 감지 (확률 분포 변화)
+      - alert: PredictionDistributionShift
+        expr: |
+          abs(
+            avg(fraud_detection_prediction_probability_bucket{le="0.5"})
+            - avg(fraud_detection_prediction_probability_bucket{le="0.5"} offset 1h)
+          ) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prediction distribution shift detected"
+          description: "The prediction probability distribution has shifted significantly"
