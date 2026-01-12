@@ -115,8 +115,8 @@ class TestReviewEndpoint:
         response = client.post("/api/review", json={})
         assert response.status_code == 422
 
-    @patch("main.ReviewOrchestrator")
-    @patch("main.ChatOpenAI")
+    @patch("agents.ReviewOrchestrator")
+    @patch("langchain_openai.ChatOpenAI")
     def test_review_returns_result(self, mock_openai, mock_orchestrator, client, mock_env):
         # Setup mocks
         mock_result = {

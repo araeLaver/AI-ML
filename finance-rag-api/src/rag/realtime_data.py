@@ -152,7 +152,9 @@ class RealtimeDataService:
             return cached
 
         if not self._yf_available:
-            return self._get_sample_stock(symbol_or_name, symbol)
+            sample = self._get_sample_stock(symbol_or_name, symbol)
+            self._set_cache(cache_key, sample)
+            return sample
 
         try:
             import yfinance as yf

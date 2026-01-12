@@ -95,11 +95,11 @@ class TestGlobalInference:
 
     def test_get_inference_not_initialized(self):
         """초기화 전 get_inference 호출"""
-        from src.inference.inference_engine import get_inference
+        from src.inference.inference_engine import get_inference, ModelNotLoadedError
         import src.inference.inference_engine as module
         module._global_inference = None
 
-        with pytest.raises(RuntimeError, match="not initialized"):
+        with pytest.raises(ModelNotLoadedError, match="not initialized"):
             get_inference()
 
 
