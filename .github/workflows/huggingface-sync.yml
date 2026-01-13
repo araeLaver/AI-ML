@@ -1,0 +1,27 @@
+name: Sync to HuggingFace Spaces
+on:
+    push:
+      branches:
+        - main
+      paths:
+        - 'huggingface-spaces/finance-rag-demo/**'
+jobs:
+    sync:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+
+        - name: Push to HuggingFace Spaces
+          env:
+            HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          run: |
+            cd huggingface-spaces/finance-rag-demo
+            git config user.email "action@github.com"
+            git config user.name "GitHub Action"
+            git init
+            git remote add space https://huggingface:$HF_TOKEN@huggingface.co/spaces/${{ secrets.HF_USERNAME }}/finance-rag-demo
+            git add .
+            git commit -m "Sync from GitHub"
+            git push space main --force
