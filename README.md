@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![Tests](https://img.shields.io/badge/Tests-189%20passed-brightgreen.svg)](#테스트-현황)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![HuggingFace](https://img.shields.io/badge/🤗%20Demo-Live-orange.svg)](https://huggingface.co/spaces/araeLaver/finance-rag-demo)
+[![HuggingFace](https://img.shields.io/badge/🤗%20Demo-Live-orange.svg)](https://huggingface.co/spaces/downkim/finance-rag-demo)
 
 > 백엔드 개발자(9년)의 AI/ML Engineer 전환을 위한 6단계 학습 로드맵과 실전 프로젝트
 
@@ -11,7 +11,7 @@
 
 | 프로젝트 | 데모 링크 | 설명 |
 |:---|:---:|:---|
-| **Finance RAG** | [🤗 HuggingFace Spaces](https://huggingface.co/spaces/araeLaver/finance-rag-demo) | 금융 RAG Q&A 데모 |
+| **Finance RAG** | [🤗 HuggingFace Spaces](https://huggingface.co/spaces/downkim/finance-rag-demo) | 금융 RAG Q&A 데모 |
 | **Portfolio** | Coming Soon | 포트폴리오 웹사이트 |
 
 ---
