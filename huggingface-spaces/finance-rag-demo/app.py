@@ -1,27 +1,37 @@
 # -*- coding: utf-8 -*-
 """
-Finance RAG Demo - HuggingFace Spaces Version
-Real-time Stock Data + RAG Q&A with HuggingFace Inference API
+Finance RAG Pro - Production-Grade RAG System
+HuggingFace Spaces Version
+
+Features:
+- Hybrid Search (Vector + BM25 + RRF)
+- Groq API LLM (Fast Response)
+- Document Upload (PDF/TXT)
+- Re-ranking (Keyword-based)
+- 50+ DART-style Sample Documents
 """
 
 import streamlit as st
-import os
-import requests
-import numpy as np
-from datetime import datetime
-from dataclasses import dataclass
-from typing import Optional, List, Dict, Tuple
-import json
 import time
+from typing import List, Dict, Any, Optional, Tuple
+from dataclasses import dataclass
+
+# Config & Modules
+from config import get_config, get_secret
+from rag.llm_provider import get_llm_provider, BaseLLMProvider
+from rag.hybrid_search import HybridSearcher, SearchResult
+from rag.reranker import KeywordReranker, RankedDocument
+from data.sample_docs import get_all_documents, get_categories, get_document_count
+from data.document_loader import DocumentLoader, ChunkingConfig
 
 # ============================================================
 # Page Config
 # ============================================================
 st.set_page_config(
-    page_title="Finance RAG Demo",
+    page_title="Finance RAG Pro",
     page_icon="📈",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # ============================================================
@@ -38,6 +48,7 @@ st.markdown("""
     --accent: #ff4d00;
     --green: #26a69a;
     --red: #ef5350;
+    --blue: #2196f3;
 }
 
 * { font-family: 'Inter', -apple-system, sans-serif; }
@@ -49,341 +60,254 @@ footer { visibility: hidden; }
 
 .main-header {
     text-align: center;
-    padding: 2rem 0;
+    padding: 1.5rem 0;
     border-bottom: 1px solid #eee;
+    margin-bottom: 1rem;
 }
 .main-title {
-    font-size: 2.5rem;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--black);
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 .main-subtitle {
-    font-size: 1rem;
+    font-size: 0.9rem;
     color: var(--gray);
 }
 .badge {
     display: inline-block;
     background: var(--accent);
     color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    margin-left: 10px;
+    padding: 3px 10px;
+    border-radius: 15px;
+    font-size: 0.7rem;
+    margin-left: 8px;
+    vertical-align: middle;
 }
-.badge-free {
-    background: var(--green);
-}
+.badge-groq { background: #f97316; }
+.badge-hybrid { background: #8b5cf6; }
 
 .stock-card {
     background: white;
     border: 1px solid #eee;
     border-radius: 12px;
-    padding: 1.5rem;
-    margin-bottom: 1rem;
+    padding: 1.25rem;
+    margin-bottom: 0.75rem;
 }
-.stock-name { font-size: 0.85rem; color: var(--gray); margin-bottom: 0.25rem; }
-.stock-price { font-size: 1.75rem; font-weight: 700; color: var(--black); }
-.stock-change { font-size: 0.9rem; font-weight: 500; }
+.stock-name { font-size: 0.8rem; color: var(--gray); margin-bottom: 0.2rem; }
+.stock-price { font-size: 1.5rem; font-weight: 700; color: var(--black); }
+.stock-change { font-size: 0.85rem; font-weight: 500; }
 .stock-up { color: var(--green); }
 .stock-down { color: var(--red); }
 
 .source-card {
     background: #f8f9fa;
     border-left: 3px solid var(--accent);
-    padding: 1rem;
+    padding: 0.75rem;
     margin: 0.5rem 0;
     border-radius: 0 8px 8px 0;
 }
-.source-title { font-weight: 600; margin-bottom: 0.5rem; }
-.source-score { color: var(--green); font-size: 0.8rem; }
 
-.feature-card {
+.search-type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+.search-hybrid { background: #ede9fe; color: #7c3aed; }
+.search-vector { background: #dbeafe; color: #2563eb; }
+.search-keyword { background: #fef3c7; color: #d97706; }
+
+.stat-box {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    border-radius: 12px;
-    padding: 1.5rem;
+    border-radius: 10px;
+    padding: 1rem;
     text-align: center;
 }
-.feature-icon { font-size: 2rem; margin-bottom: 0.5rem; }
-.feature-title { font-size: 1rem; font-weight: 600; }
-.feature-desc { font-size: 0.8rem; opacity: 0.9; }
+.stat-number { font-size: 1.5rem; font-weight: 700; }
+.stat-label { font-size: 0.75rem; opacity: 0.9; }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# HuggingFace Inference API
+# Session State Initialization
 # ============================================================
-HF_API_URL = "https://api-inference.huggingface.co/models/"
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
-LLM_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
-
-def get_hf_token():
-    """Get HuggingFace token from secrets or environment"""
-    # Try secrets first (HuggingFace Spaces)
-    try:
-        return st.secrets.get("HF_TOKEN", os.environ.get("HF_TOKEN", ""))
-    except:
-        return os.environ.get("HF_TOKEN", "")
-
-def get_embeddings(texts: List[str], token: str = "") -> List[List[float]]:
-    """Get embeddings using HuggingFace Inference API"""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-
-    response = requests.post(
-        HF_API_URL + EMBEDDING_MODEL,
-        headers=headers,
-        json={"inputs": texts, "options": {"wait_for_model": True}},
-        timeout=30
-    )
-
-    if response.status_code == 200:
-        return response.json()
-    else:
-        # Fallback: simple TF-IDF like embedding
-        return simple_embeddings(texts)
-
-def simple_embeddings(texts: List[str]) -> List[List[float]]:
-    """Simple fallback embeddings using character n-grams"""
-    def text_to_vec(text: str, dim: int = 384) -> List[float]:
-        text = text.lower()
-        vec = [0.0] * dim
-        for i, char in enumerate(text):
-            idx = (ord(char) * (i + 1)) % dim
-            vec[idx] += 1.0
-        # Normalize
-        norm = sum(v * v for v in vec) ** 0.5
-        if norm > 0:
-            vec = [v / norm for v in vec]
-        return vec
-    return [text_to_vec(t) for t in texts]
-
-def generate_response(prompt: str, token: str = "", max_tokens: int = 500) -> str:
-    """Generate response using HuggingFace Inference API"""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-
-    # Format for Mistral Instruct
-    formatted_prompt = f"<s>[INST] {prompt} [/INST]"
-
-    try:
-        response = requests.post(
-            HF_API_URL + LLM_MODEL,
-            headers=headers,
-            json={
-                "inputs": formatted_prompt,
-                "parameters": {
-                    "max_new_tokens": max_tokens,
-                    "temperature": 0.7,
-                    "do_sample": True,
-                    "return_full_text": False
-                },
-                "options": {"wait_for_model": True}
-            },
-            timeout=60
+def init_session_state():
+    """세션 상태 초기화"""
+    if "searcher" not in st.session_state:
+        config = get_config()
+        st.session_state.searcher = HybridSearcher(
+            hf_token=config.hf_token or "",
+            vector_weight=config.vector_weight,
+            keyword_weight=config.keyword_weight
         )
+        # 샘플 문서 로드
+        load_sample_documents()
 
-        if response.status_code == 200:
-            result = response.json()
-            if isinstance(result, list) and len(result) > 0:
-                return result[0].get("generated_text", "").strip()
+    if "uploaded_docs" not in st.session_state:
+        st.session_state.uploaded_docs = []
 
-        # If API fails, use template response
-        return None
+    if "reranker" not in st.session_state:
+        st.session_state.reranker = KeywordReranker()
+
+
+def load_sample_documents():
+    """샘플 문서를 검색 엔진에 로드"""
+    docs = get_all_documents()
+    documents = [f"{d['title']}\n{d['content']}" for d in docs]
+    doc_ids = [d['id'] for d in docs]
+    metadatas = [
+        {
+            "title": d.get("title", ""),
+            "date": d.get("date", ""),
+            "source": d.get("source", ""),
+            "category": d.get("category", ""),
+            "company": d.get("company", ""),
+        }
+        for d in docs
+    ]
+    st.session_state.searcher.index_documents(documents, doc_ids, metadatas)
+
+
+def get_llm() -> Optional[BaseLLMProvider]:
+    """LLM Provider 가져오기"""
+    config = get_config()
+    try:
+        return get_llm_provider(
+            groq_api_key=config.groq_api_key,
+            hf_token=config.hf_token,
+            model=config.llm_model,
+            temperature=config.llm_temperature
+        )
     except Exception as e:
         return None
 
-def cosine_similarity(a: List[float], b: List[float]) -> float:
-    """Calculate cosine similarity between two vectors"""
-    a_np = np.array(a)
-    b_np = np.array(b)
-    return float(np.dot(a_np, b_np) / (np.linalg.norm(a_np) * np.linalg.norm(b_np) + 1e-8))
-
-# ============================================================
-# Financial Documents (Knowledge Base)
-# ============================================================
-FINANCIAL_DOCUMENTS = [
-    {
-        "id": "doc_1",
-        "title": "삼성전자 2024년 4분기 실적",
-        "content": """삼성전자는 2024년 4분기 매출 79조원, 영업이익 8.1조원을 기록했습니다.
-반도체 부문은 HBM(고대역폭메모리) 수요 증가로 실적이 크게 개선되었습니다.
-HBM3E 양산이 본격화되면서 AI 서버 시장 점유율이 확대되고 있습니다.
-2025년에는 HBM4 개발을 완료하고 양산에 돌입할 예정입니다.
-메모리 반도체 가격 상승과 함께 수익성이 크게 개선될 전망입니다.""",
-        "date": "2024-12-15",
-        "source": "삼성전자 IR",
-        "category": "실적"
-    },
-    {
-        "id": "doc_2",
-        "title": "SK하이닉스 AI 반도체 전망",
-        "content": """SK하이닉스는 AI 반도체 시장에서 HBM 점유율 1위를 유지하고 있습니다.
-NVIDIA와의 협력을 통해 H100, H200 GPU에 HBM3E를 독점 공급 중입니다.
-2024년 HBM 매출은 전년 대비 300% 이상 증가했습니다.
-2025년 예상 HBM 매출은 20조원을 상회할 것으로 전망됩니다.
-AI 데이터센터 투자 확대로 고대역폭 메모리 수요가 폭발적으로 증가하고 있습니다.""",
-        "date": "2024-12-20",
-        "source": "SK하이닉스 IR",
-        "category": "AI반도체"
-    },
-    {
-        "id": "doc_3",
-        "title": "한국은행 기준금리 전망 2025",
-        "content": """한국은행은 2024년 11월 기준금리를 3.25%에서 3.0%로 인하했습니다.
-물가 안정세가 지속되면서 추가 인하 가능성이 높아지고 있습니다.
-2025년 상반기 중 2.75%까지 인하될 것으로 시장은 예상하고 있습니다.
-금리 인하는 부동산 시장 회복과 가계 이자 부담 경감에 도움이 될 전망입니다.
-다만 환율 변동성과 미국 금리 정책에 따라 속도 조절 가능성도 있습니다.""",
-        "date": "2024-11-28",
-        "source": "한국은행",
-        "category": "금리"
-    },
-    {
-        "id": "doc_4",
-        "title": "네이버 AI 사업 현황 및 전략",
-        "content": """네이버는 하이퍼클로바X를 기반으로 B2B AI 서비스를 확대하고 있습니다.
-클로바 스튜디오 MAU가 100만을 돌파하며 국내 1위 AI 플랫폼으로 자리잡았습니다.
-네이버클라우드의 AI 매출 비중이 30%를 넘어섰습니다.
-2025년에는 일본, 동남아 시장으로 AI 서비스 진출을 본격화할 계획입니다.
-검색, 커머스, 콘텐츠 전 영역에 AI를 적용하여 사용자 경험을 혁신하고 있습니다.""",
-        "date": "2024-12-10",
-        "source": "네이버 IR",
-        "category": "AI사업"
-    },
-    {
-        "id": "doc_5",
-        "title": "카카오 구조조정 및 2025 전략",
-        "content": """카카오는 비핵심 사업 정리를 통해 수익성 개선에 집중하고 있습니다.
-카카오엔터테인먼트와 카카오모빌리티의 IPO를 2025년 추진할 예정입니다.
-AI 기술을 활용한 광고 타겟팅 고도화로 광고 매출이 15% 증가했습니다.
-2025년 영업이익률 목표는 15%로 설정했습니다.
-카카오톡 비즈니스 메시지와 선물하기 서비스가 핵심 수익원으로 성장 중입니다.""",
-        "date": "2024-12-05",
-        "source": "카카오 IR",
-        "category": "전략"
-    },
-    {
-        "id": "doc_6",
-        "title": "2025년 글로벌 AI 시장 전망",
-        "content": """2025년 글로벌 AI 시장 규모는 5,000억 달러를 넘어설 전망입니다.
-생성형 AI가 시장 성장을 주도하며, 기업용 AI 솔루션 수요가 급증하고 있습니다.
-주요 성장 분야는 AI 반도체, 클라우드 AI, 엔터프라이즈 AI입니다.
-Microsoft, Google, Amazon이 AI 인프라 투자를 대폭 확대하고 있습니다.
-한국 기업들은 AI 반도체와 AI 서비스 분야에서 글로벌 경쟁력을 확보하고 있습니다.""",
-        "date": "2024-12-18",
-        "source": "글로벌 리서치",
-        "category": "시장전망"
-    },
-    {
-        "id": "doc_7",
-        "title": "테슬라 FSD 및 로보택시 전망",
-        "content": """테슬라는 2025년 완전자율주행(FSD) 상용화를 목표로 하고 있습니다.
-로보택시 서비스 'Cybercab'을 2025년 하반기 출시 예정입니다.
-FSD 구독 매출이 분기당 10억 달러를 돌파했습니다.
-자율주행 데이터 축적량이 경쟁사 대비 10배 이상 많습니다.
-AI 기반 자율주행 기술이 테슬라의 핵심 가치 동력이 되고 있습니다.""",
-        "date": "2024-12-12",
-        "source": "테슬라 IR",
-        "category": "자율주행"
-    },
-    {
-        "id": "doc_8",
-        "title": "비트코인 및 암호화폐 2025 전망",
-        "content": """비트코인이 2024년 말 10만 달러를 돌파하며 사상 최고가를 기록했습니다.
-비트코인 현물 ETF 승인 이후 기관 투자자 유입이 크게 증가했습니다.
-2025년에는 15만 달러까지 상승할 것이라는 전망이 우세합니다.
-이더리움 ETF도 승인되면서 암호화폐 시장 전반이 활성화되고 있습니다.
-다만 규제 불확실성과 변동성 리스크는 여전히 존재합니다.""",
-        "date": "2024-12-22",
-        "source": "암호화폐 리서치",
-        "category": "암호화폐"
-    }
-]
-
-# ============================================================
-# Vector Store (In-Memory)
-# ============================================================
-@st.cache_resource
-def build_vector_store():
-    """Build vector store with document embeddings"""
-    texts = [f"{doc['title']} {doc['content']}" for doc in FINANCIAL_DOCUMENTS]
-    token = get_hf_token()
-    embeddings = get_embeddings(texts, token)
-    return embeddings
-
-def search_documents(query: str, top_k: int = 3) -> List[Tuple[Dict, float]]:
-    """Search documents using vector similarity"""
-    # Get query embedding
-    token = get_hf_token()
-    query_embedding = get_embeddings([query], token)[0]
-
-    # Get document embeddings (cached)
-    doc_embeddings = build_vector_store()
-
-    # Calculate similarities
-    similarities = []
-    for i, doc_emb in enumerate(doc_embeddings):
-        sim = cosine_similarity(query_embedding, doc_emb)
-        similarities.append((FINANCIAL_DOCUMENTS[i], sim))
-
-    # Sort by similarity
-    similarities.sort(key=lambda x: x[1], reverse=True)
-
-    return similarities[:top_k]
 
 # ============================================================
 # RAG Pipeline
 # ============================================================
-def rag_query(question: str) -> Tuple[str, List[Tuple[Dict, float]]]:
-    """RAG: Retrieve documents and generate answer"""
+def rag_query(
+    question: str,
+    search_mode: str = "hybrid",
+    use_rerank: bool = True,
+    top_k: int = 5
+) -> Tuple[str, List[Dict[str, Any]], float]:
+    """
+    RAG 파이프라인 실행
 
-    # 1. Retrieve relevant documents
-    retrieved = search_documents(question, top_k=3)
+    Returns:
+        answer, retrieved_docs, elapsed_time
+    """
+    start_time = time.time()
 
-    # 2. Build context
-    context = "\n\n".join([
-        f"[{doc['title']}] ({doc['source']}, {doc['date']})\n{doc['content']}"
-        for doc, score in retrieved
-    ])
+    # 1. 검색
+    searcher = st.session_state.searcher
+    search_results = searcher.search(question, top_k=top_k * 2, search_mode=search_mode)
 
-    # 3. Generate answer
-    prompt = f"""다음 금융 문서들을 참고하여 질문에 답변해주세요.
+    # 2. Re-ranking (선택)
+    if use_rerank and search_results:
+        reranker = st.session_state.reranker
+        docs_for_rerank = [
+            {
+                "doc_id": r.doc_id,
+                "content": r.content,
+                "score": r.score,
+                "metadata": r.metadata,
+                "search_type": r.search_type
+            }
+            for r in search_results
+        ]
+        reranked = reranker.rerank(question, docs_for_rerank, top_k=top_k)
+        retrieved = [
+            {
+                "doc_id": r.doc_id,
+                "content": r.content,
+                "score": r.rerank_score,
+                "metadata": r.metadata,
+                "search_type": docs_for_rerank[r.original_rank - 1]["search_type"] if r.original_rank <= len(docs_for_rerank) else "unknown"
+            }
+            for r in reranked
+        ]
+    else:
+        retrieved = [
+            {
+                "doc_id": r.doc_id,
+                "content": r.content,
+                "score": r.score,
+                "metadata": r.metadata,
+                "search_type": r.search_type
+            }
+            for r in search_results[:top_k]
+        ]
 
-### 참고 문서:
+    # 3. 컨텍스트 구성
+    context_parts = []
+    for doc in retrieved:
+        meta = doc.get("metadata", {})
+        title = meta.get("title", "")
+        source = meta.get("source", "")
+        date = meta.get("date", "")
+        content = doc.get("content", "")
+
+        if title:
+            context_parts.append(f"[{title}] ({source}, {date})\n{content}")
+        else:
+            context_parts.append(content)
+
+    context = "\n\n---\n\n".join(context_parts)
+
+    # 4. LLM 답변 생성
+    llm = get_llm()
+
+    if llm:
+        system_prompt = """당신은 금융 전문 AI 어시스턴트입니다.
+주어진 참고 문서를 바탕으로 정확하고 구체적으로 답변해주세요.
+문서에 없는 내용은 추측하지 마세요.
+답변은 한국어로 작성하세요."""
+
+        user_prompt = f"""### 참고 문서:
 {context}
 
 ### 질문:
 {question}
 
-### 답변:
-위 문서들을 바탕으로 정확하고 구체적으로 답변해주세요. 문서에 없는 내용은 추측하지 마세요."""
+### 답변:"""
 
-    token = get_hf_token()
-    answer = generate_response(prompt, token)
+        try:
+            response = llm.generate(system_prompt, user_prompt, max_tokens=1024)
+            answer = response.content
+        except Exception as e:
+            answer = generate_fallback_answer(question, retrieved)
+    else:
+        answer = generate_fallback_answer(question, retrieved)
 
-    # Fallback if API fails
-    if not answer:
-        answer = generate_template_answer(question, retrieved)
+    elapsed = time.time() - start_time
 
-    return answer, retrieved
+    return answer, retrieved, elapsed
 
-def generate_template_answer(question: str, retrieved: List[Tuple[Dict, float]]) -> str:
-    """Generate template-based answer as fallback"""
+
+def generate_fallback_answer(question: str, retrieved: List[Dict[str, Any]]) -> str:
+    """API 실패 시 Fallback 답변"""
     if not retrieved:
         return "관련 문서를 찾을 수 없습니다."
 
-    top_doc, score = retrieved[0]
+    top_doc = retrieved[0]
+    meta = top_doc.get("metadata", {})
+    title = meta.get("title", "관련 문서")
+    content = top_doc.get("content", "")
+    score = top_doc.get("score", 0)
 
-    answer = f"""**{top_doc['title']}**에서 관련 정보를 찾았습니다.
+    return f"""**{title}**에서 관련 정보를 찾았습니다.
 
-{top_doc['content']}
+{content[:500]}{"..." if len(content) > 500 else ""}
 
 ---
-📊 **관련도**: {score:.1%}
-📅 **날짜**: {top_doc['date']}
-📌 **출처**: {top_doc['source']}"""
+📊 관련도: {score:.1%} | 📅 날짜: {meta.get('date', 'N/A')} | 📌 출처: {meta.get('source', 'N/A')}
 
-    return answer
+💡 더 정확한 답변을 위해 GROQ_API_KEY를 설정해주세요."""
+
 
 # ============================================================
 # Stock Data
@@ -397,9 +321,10 @@ class StockQuote:
     change_percent: float
     volume: int
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+
+@st.cache_data(ttl=300)
 def get_stock_data() -> Dict[str, StockQuote]:
-    """Get real-time stock data using yfinance"""
+    """실시간 주식 데이터 (yfinance)"""
     try:
         import yfinance as yf
         stocks = {
@@ -426,14 +351,14 @@ def get_stock_data() -> Dict[str, StockQuote]:
                         change_percent=round(change_pct, 2),
                         volume=int(hist['Volume'].iloc[-1]) if 'Volume' in hist else 0
                     )
-            except Exception as e:
+            except Exception:
                 pass
         if result:
             return result
     except ImportError:
         pass
 
-    # Fallback sample data
+    # Fallback
     return {
         "삼성전자": StockQuote("005930.KS", "삼성전자", 71500, 1200, 1.71, 12500000),
         "SK하이닉스": StockQuote("000660.KS", "SK하이닉스", 178000, 3500, 2.01, 3200000),
@@ -441,42 +366,150 @@ def get_stock_data() -> Dict[str, StockQuote]:
         "카카오": StockQuote("035720.KS", "카카오", 42000, -500, -1.18, 2100000),
     }
 
+
+# ============================================================
+# Sidebar
+# ============================================================
+def render_sidebar():
+    """사이드바 렌더링"""
+    with st.sidebar:
+        st.markdown("### ⚙️ 설정")
+
+        # API 상태 표시
+        config = get_config()
+        if config.groq_api_key:
+            st.success("✅ Groq API 연결됨")
+        else:
+            st.warning("⚠️ Groq API 미설정 (Fallback 모드)")
+            st.caption("Secrets에 GROQ_API_KEY를 추가하세요")
+
+        st.markdown("---")
+
+        # 검색 설정
+        st.markdown("### 🔍 검색 설정")
+
+        search_mode = st.selectbox(
+            "검색 모드",
+            options=["hybrid", "vector", "keyword"],
+            format_func=lambda x: {
+                "hybrid": "🔀 하이브리드 (추천)",
+                "vector": "🎯 벡터 검색",
+                "keyword": "📝 키워드 검색"
+            }[x]
+        )
+
+        use_rerank = st.checkbox("Re-ranking 사용", value=True)
+        top_k = st.slider("검색 결과 수", 3, 10, 5)
+
+        st.markdown("---")
+
+        # 문서 업로드
+        st.markdown("### 📤 문서 업로드")
+        uploaded_file = st.file_uploader(
+            "PDF/TXT 파일 업로드",
+            type=["pdf", "txt", "md"],
+            help="업로드된 문서는 RAG 검색에 추가됩니다"
+        )
+
+        if uploaded_file:
+            if st.button("문서 추가", type="primary"):
+                with st.spinner("문서 처리 중..."):
+                    try:
+                        loader = DocumentLoader(ChunkingConfig(chunk_size=500, chunk_overlap=100))
+                        docs = loader.load_from_uploaded_file(uploaded_file)
+
+                        # 검색 엔진에 추가
+                        documents = [d.content for d in docs]
+                        doc_ids = [d.id for d in docs]
+                        metadatas = [d.metadata for d in docs]
+
+                        st.session_state.searcher.index_documents(documents, doc_ids, metadatas)
+                        st.session_state.uploaded_docs.append({
+                            "filename": uploaded_file.name,
+                            "chunks": len(docs)
+                        })
+                        st.success(f"✅ {len(docs)}개 청크 추가됨")
+                    except Exception as e:
+                        st.error(f"❌ 오류: {e}")
+
+        # 업로드된 문서 목록
+        if st.session_state.uploaded_docs:
+            st.markdown("**업로드된 문서:**")
+            for doc in st.session_state.uploaded_docs:
+                st.caption(f"📄 {doc['filename']} ({doc['chunks']} chunks)")
+
+        st.markdown("---")
+
+        # 통계
+        st.markdown("### 📊 시스템 정보")
+        stats = st.session_state.searcher.get_stats()
+        st.metric("총 문서 수", stats["total_documents"])
+        st.caption(f"Vector: {stats['vector_store']['model'].split('/')[-1]}")
+        st.caption(f"BM25: {stats['bm25']['vocab_size']} 어휘")
+
+    return search_mode, use_rerank, top_k
+
+
 # ============================================================
 # Main App
 # ============================================================
 def main():
+    # 초기화
+    init_session_state()
+
     # Header
     st.markdown("""
     <div class="main-header">
         <div class="main-title">
             Finance RAG Pro
-            <span class="badge">AI Powered</span>
-            <span class="badge badge-free">Free</span>
+            <span class="badge badge-groq">Groq</span>
+            <span class="badge badge-hybrid">Hybrid</span>
         </div>
         <div class="main-subtitle">
-            HuggingFace 무료 모델 기반 금융 RAG Q&A 시스템
+            Production-Grade RAG | 하이브리드 검색 + Groq LLM
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Features
-    st.markdown("<br>", unsafe_allow_html=True)
-    cols = st.columns(4)
-    features = [
-        ("🔍", "벡터 검색", "임베딩 기반 시맨틱 검색"),
-        ("🤖", "LLM 답변", "Mistral-7B 모델 사용"),
-        ("📊", "실시간 시세", "yfinance 연동"),
-        ("💰", "완전 무료", "HuggingFace API"),
-    ]
-    for col, (icon, title, desc) in zip(cols, features):
-        with col:
-            st.markdown(f"""
-            <div class="feature-card">
-                <div class="feature-icon">{icon}</div>
-                <div class="feature-title">{title}</div>
-                <div class="feature-desc">{desc}</div>
-            </div>
-            """, unsafe_allow_html=True)
+    # Sidebar
+    search_mode, use_rerank, top_k = render_sidebar()
+
+    # Stats Row
+    col1, col2, col3, col4 = st.columns(4)
+
+    config = get_config()
+    with col1:
+        st.markdown(f"""
+        <div class="stat-box">
+            <div class="stat-number">{get_document_count()}+</div>
+            <div class="stat-label">샘플 문서</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div class="stat-box">
+            <div class="stat-number">Vector+BM25</div>
+            <div class="stat-label">하이브리드 검색</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        llm_name = "Groq" if config.groq_api_key else "Fallback"
+        st.markdown(f"""
+        <div class="stat-box">
+            <div class="stat-number">{llm_name}</div>
+            <div class="stat-label">LLM Provider</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown("""
+        <div class="stat-box">
+            <div class="stat-number">2-3초</div>
+            <div class="stat-label">예상 응답시간</div>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -486,49 +519,73 @@ def main():
     # ============ TAB 1: RAG Q&A ============
     with tab1:
         st.markdown("### 🤖 금융 AI 어시스턴트")
-        st.markdown("금융 문서를 검색하고 AI가 답변을 생성합니다.")
 
-        # Sample questions
+        # Sample Questions
         st.markdown("**📝 예시 질문:**")
         sample_qs = [
             "삼성전자 4분기 실적은?",
             "HBM 시장 전망은?",
             "2025년 금리 전망",
             "네이버 AI 사업 현황",
+            "비트코인 전망",
         ]
 
-        cols = st.columns(4)
+        cols = st.columns(5)
         selected_q = None
         for col, q in zip(cols, sample_qs):
-            if col.button(q, use_container_width=True):
+            if col.button(q, use_container_width=True, key=f"sample_{q}"):
                 selected_q = q
 
-        # Query input
+        # Query Input
         query = st.text_input(
             "질문을 입력하세요",
             value=selected_q if selected_q else "",
-            placeholder="예: 삼성전자 실적은 어떤가요?"
+            placeholder="예: 삼성전자 HBM 전략은?"
         )
 
         if query:
-            with st.spinner("🔍 문서 검색 및 답변 생성 중..."):
-                start_time = time.time()
-                answer, retrieved = rag_query(query)
-                elapsed = time.time() - start_time
+            with st.spinner("🔍 검색 및 답변 생성 중..."):
+                answer, retrieved, elapsed = rag_query(
+                    query,
+                    search_mode=search_mode,
+                    use_rerank=use_rerank,
+                    top_k=top_k
+                )
 
             # Answer
             st.markdown("---")
             st.markdown("### 📝 AI 답변")
             st.markdown(answer)
-            st.caption(f"⏱️ 응답 시간: {elapsed:.2f}초")
+
+            # Metrics
+            col1, col2, col3 = st.columns(3)
+            col1.metric("응답 시간", f"{elapsed:.2f}초")
+            col2.metric("검색 모드", search_mode.upper())
+            col3.metric("검색 결과", f"{len(retrieved)}개")
 
             # Sources
             st.markdown("### 📚 참조 문서")
-            for doc, score in retrieved:
-                with st.expander(f"📄 {doc['title']} (관련도: {score:.1%})"):
-                    st.markdown(f"**카테고리**: {doc['category']}")
-                    st.markdown(doc['content'])
-                    st.caption(f"출처: {doc['source']} | 날짜: {doc['date']}")
+            for i, doc in enumerate(retrieved):
+                meta = doc.get("metadata", {})
+                title = meta.get("title", f"문서 {i+1}")
+                score = doc.get("score", 0)
+                search_type = doc.get("search_type", "unknown")
+
+                # Search type badge
+                badge_class = {
+                    "hybrid": "search-hybrid",
+                    "vector": "search-vector",
+                    "keyword": "search-keyword"
+                }.get(search_type, "search-keyword")
+
+                with st.expander(f"📄 {title} (관련도: {score:.1%})"):
+                    st.markdown(f"""
+                    <span class="search-type-badge {badge_class}">{search_type.upper()}</span>
+                    """, unsafe_allow_html=True)
+                    st.markdown(f"**카테고리**: {meta.get('category', 'N/A')}")
+                    st.markdown(f"**기업**: {meta.get('company', 'N/A')}")
+                    st.markdown(doc.get("content", "")[:500] + "...")
+                    st.caption(f"출처: {meta.get('source', 'N/A')} | 날짜: {meta.get('date', 'N/A')}")
 
     # ============ TAB 2: Stock Data ============
     with tab2:
@@ -561,29 +618,34 @@ def main():
     # ============ TAB 3: Documents ============
     with tab3:
         st.markdown("### 📚 RAG 지식베이스")
-        st.markdown(f"총 **{len(FINANCIAL_DOCUMENTS)}개** 문서가 등록되어 있습니다.")
+
+        docs = get_all_documents()
+        st.markdown(f"총 **{len(docs)}개** 문서가 등록되어 있습니다.")
 
         # Category filter
-        categories = list(set(doc['category'] for doc in FINANCIAL_DOCUMENTS))
-        selected_cat = st.selectbox("카테고리 필터", ["전체"] + categories)
+        categories = ["전체"] + sorted(get_categories())
+        selected_cat = st.selectbox("카테고리 필터", categories)
 
-        for doc in FINANCIAL_DOCUMENTS:
-            if selected_cat != "전체" and doc['category'] != selected_cat:
+        # Document list
+        for doc in docs:
+            if selected_cat != "전체" and doc.get("category") != selected_cat:
                 continue
-            with st.expander(f"📄 {doc['title']} [{doc['category']}]"):
-                st.markdown(doc['content'])
-                st.caption(f"출처: {doc['source']} | 날짜: {doc['date']} | ID: {doc['id']}")
+
+            with st.expander(f"📄 {doc['title']} [{doc.get('category', '')}]"):
+                st.markdown(doc.get("content", ""))
+                st.caption(f"출처: {doc.get('source', '')} | 날짜: {doc.get('date', '')} | 기업: {doc.get('company', '')}")
 
     # Footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: #888; font-size: 0.8rem; padding: 1rem;">
-        <p><strong>🛠️ 기술 스택</strong>: Streamlit + HuggingFace Inference API + yfinance</p>
-        <p><strong>🤖 모델</strong>: Mistral-7B (LLM) + all-MiniLM-L6-v2 (Embeddings)</p>
+        <p><strong>🛠️ Tech Stack</strong>: Streamlit + Groq API + Hybrid Search (Vector + BM25 + RRF)</p>
+        <p><strong>🤖 Models</strong>: Llama 3.1 (LLM) + all-MiniLM-L6-v2 (Embeddings)</p>
         <p>Made with ❤️ by <a href="https://github.com/araeLaver" target="_blank">Kim Dawoon</a> |
         <a href="https://github.com/araeLaver/AI-ML" target="_blank">Full Project on GitHub</a></p>
     </div>
     """, unsafe_allow_html=True)
+
 
 if __name__ == "__main__":
     main()
