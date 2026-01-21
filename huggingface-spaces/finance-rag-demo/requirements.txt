@@ -8,6 +8,7 @@ numpy>=1.24.0
 
 # PDF Processing
 pypdf>=4.0.0
+fpdf2>=2.7.0
 
 # HTTP Requests (for Groq API, HuggingFace API)
 requests>=2.31.0

@@ -7,8 +7,37 @@ HuggingFace Spaces 환경에서 설정 관리
 
 import os
 import streamlit as st
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, List
+
+
+@dataclass
+class UIConfig:
+    """UI 설정"""
+    # 테마 색상 (GitHub-style Dark Theme)
+    bg_primary: str = "#0d1117"
+    bg_secondary: str = "#161b22"
+    bg_elevated: str = "#21262d"
+    text_primary: str = "#e6edf3"
+    text_secondary: str = "#8b949e"
+    accent_blue: str = "#58a6ff"
+    accent_green: str = "#3fb950"
+    accent_red: str = "#f85149"
+    accent_orange: str = "#f0883e"
+    border_color: str = "#30363d"
+
+    # 대화 히스토리 설정
+    chat_history_enabled: bool = True
+    max_history_items: int = 50
+
+    # 내보내기 설정
+    export_enabled: bool = True
+    export_formats: List[str] = field(default_factory=lambda: ["csv", "pdf"])
+
+    # 차트 설정
+    chart_enabled: bool = True
+    chart_default_period: str = "3mo"
+    chart_periods: List[str] = field(default_factory=lambda: ["1mo", "3mo", "6mo", "1y"])
 
 
 @dataclass
@@ -32,6 +61,9 @@ class AppConfig:
     chunk_size: int = 500
     chunk_overlap: int = 100
 
+    # UI 설정
+    ui: UIConfig = field(default_factory=UIConfig)
+
 
 def get_secret(key: str, default: str = "") -> str:
     """
@@ -44,7 +76,9 @@ def get_secret(key: str, default: str = "") -> str:
     """
     try:
         # HuggingFace Spaces에서는 st.secrets 사용
-        return st.secrets.get(key, os.environ.get(key, default))
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+        return os.environ.get(key, default)
     except Exception:
         return os.environ.get(key, default)
 
@@ -62,6 +96,13 @@ def load_config() -> AppConfig:
         embedding_model=get_secret("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
         chunk_size=int(get_secret("CHUNK_SIZE", "500")),
         chunk_overlap=int(get_secret("CHUNK_OVERLAP", "100")),
+        ui=UIConfig(
+            chat_history_enabled=get_secret("CHAT_HISTORY_ENABLED", "true").lower() == "true",
+            max_history_items=int(get_secret("MAX_HISTORY_ITEMS", "50")),
+            export_enabled=get_secret("EXPORT_ENABLED", "true").lower() == "true",
+            chart_enabled=get_secret("CHART_ENABLED", "true").lower() == "true",
+            chart_default_period=get_secret("CHART_DEFAULT_PERIOD", "3mo"),
+        ),
     )
 
 
