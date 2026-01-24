@@ -11,6 +11,17 @@ from .document_loader import (
     RecursiveTextSplitter,
     DocumentLoaderFactory
 )
+from .financial_dictionary import (
+    FINANCIAL_SYNONYMS,
+    get_synonyms,
+    get_canonical_term,
+    get_statistics as get_dictionary_statistics,
+)
+from .query_expander import (
+    QueryExpander,
+    expand_query,
+    normalize_query,
+)
 
 __all__ = [
     "OllamaEmbedding",
@@ -24,5 +35,13 @@ __all__ = [
     "PDFLoader",
     "TextLoader",
     "RecursiveTextSplitter",
-    "DocumentLoaderFactory"
+    "DocumentLoaderFactory",
+    # Query Expansion
+    "FINANCIAL_SYNONYMS",
+    "get_synonyms",
+    "get_canonical_term",
+    "get_dictionary_statistics",
+    "QueryExpander",
+    "expand_query",
+    "normalize_query",
 ]

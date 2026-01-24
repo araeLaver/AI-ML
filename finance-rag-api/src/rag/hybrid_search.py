@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from collections import defaultdict
 from abc import ABC, abstractmethod
 
+from .query_expander import QueryExpander
+
 logger = logging.getLogger(__name__)
 
 
@@ -416,7 +418,8 @@ class HybridSearcher:
         vector_weight: float = 0.5,
         keyword_weight: float = 0.5,
         rrf_k: int = 60,
-        use_kiwi: bool = True
+        use_kiwi: bool = True,
+        use_query_expansion: bool = True
     ):
         """
         Args:
@@ -424,14 +427,23 @@ class HybridSearcher:
             keyword_weight: 키워드 검색 가중치 (0~1)
             rrf_k: RRF 상수 (기본 60, 높을수록 순위 차이 축소)
             use_kiwi: Kiwi 형태소 분석기 사용 여부
+            use_query_expansion: 쿼리 확장 사용 여부
         """
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
         self.rrf_k = rrf_k
+        self.use_query_expansion = use_query_expansion
 
         # 토크나이저 설정
         tokenizer = TokenizerFactory.get_tokenizer(prefer_kiwi=use_kiwi)
         self.bm25 = BM25(tokenizer=tokenizer)
+
+        # 쿼리 확장기 설정
+        self.query_expander = QueryExpander(
+            tokenizer=tokenizer if use_kiwi else None,
+            max_expansions_per_term=2,
+            max_total_queries=3,
+        ) if use_query_expansion else None
 
         self._documents: List[str] = []
         self._doc_ids: List[str] = []
@@ -442,6 +454,7 @@ class HybridSearcher:
         return {
             "name": self.bm25.tokenizer.get_name(),
             "type": type(self.bm25.tokenizer).__name__,
+            "query_expansion": self.use_query_expansion,
         }
 
     def index_documents(
@@ -478,8 +491,23 @@ class HybridSearcher:
         Returns:
             통합 순위 결과
         """
-        # 1. BM25 키워드 검색
-        keyword_results = self.bm25.search(query, top_k=top_k * 2)
+        # 0. 쿼리 확장 (옵션)
+        queries_to_search = [query]
+        if self.query_expander and self.use_query_expansion:
+            expansion_result = self.query_expander.expand(query)
+            queries_to_search = expansion_result.expanded_queries
+            if len(queries_to_search) > 1:
+                logger.info(f"Query expanded: {query} -> {queries_to_search}")
+
+        # 1. BM25 키워드 검색 (모든 확장 쿼리로)
+        keyword_results = []
+        seen_doc_ids = set()
+        for q in queries_to_search:
+            results = self.bm25.search(q, top_k=top_k * 2)
+            for r in results:
+                if r.doc_id not in seen_doc_ids:
+                    keyword_results.append(r)
+                    seen_doc_ids.add(r.doc_id)
 
         # 2. RRF로 순위 통합
         doc_scores: Dict[str, float] = defaultdict(float)
