@@ -359,12 +359,63 @@ async def stream_query(query: str):
 
 ---
 
+## 고급 기능
+
+### Query Expansion
+
+금융 도메인 동의어/약어를 자동 확장하여 검색 재현율을 향상시킵니다:
+
+```python
+from src.rag.query_expansion import QueryExpander
+
+expander = QueryExpander()
+result = expander.expand("PER 분석")
+# expanded_terms: ["주가수익비율", "P/E", ...]
+```
+
+### A/B 테스트 프레임워크
+
+RAG 구성 비교 실험을 위한 프레임워크:
+
+```python
+from src.rag.ab_testing import RAGExperiment
+
+rag_exp = RAGExperiment()
+config = rag_exp.create_from_template("reranker_comparison")
+```
+
+### Fine-tuned Embedding
+
+금융 도메인 특화 임베딩 모델 학습:
+
+```python
+from src.rag.fine_tuned_embedding import FinanceEmbeddingModel
+
+model = FinanceEmbeddingModel(use_pretrained="ko-sroberta")
+embeddings = model.encode(["삼성전자 실적", "SK하이닉스 반도체"])
+```
+
+### Multi-modal 처리
+
+공시 문서 내 표/차트 인식:
+
+```python
+from src.rag.multimodal import MultiModalProcessor
+
+processor = MultiModalProcessor()
+extracted = processor.process_document(html_content, "html")
+```
+
+---
+
 ## 향후 개선 계획
 
-- [ ] **Fine-tuned Embedding**: 금융 도메인 특화 임베딩 모델
-- [ ] **Query Expansion**: 금융 동의어 확장 (PER ↔ 주가수익비율)
+- [x] **Fine-tuned Embedding**: 금융 도메인 특화 임베딩 모델 ✅
+- [x] **Query Expansion**: 금융 동의어 확장 (PER ↔ 주가수익비율) ✅
 - [x] **Real-time Update**: 실시간 공시 연동 ✅
-- [ ] **Multi-modal**: 공시 내 표/차트 인식
+- [x] **Multi-modal**: 공시 내 표/차트 인식 ✅
+- [ ] **LLM Fine-tuning**: 금융 QA 특화 LLM 학습
+- [ ] **Knowledge Graph**: 기업 관계 그래프 구축
 
 ---
 
