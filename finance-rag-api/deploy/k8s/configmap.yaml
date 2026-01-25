@@ -1,0 +1,27 @@
+# Finance RAG - ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: finance-rag-config
+  namespace: finance-rag
+  labels:
+    app.kubernetes.io/name: finance-rag
+data:
+  # Application settings
+  APP_ENV: "production"
+  LOG_LEVEL: "INFO"
+
+  # Database settings
+  CHROMA_DB_PATH: "/app/db"
+  CHROMA_COLLECTION_NAME: "finance_docs"
+
+  # Redis settings
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+
+  # LLM settings
+  LLM_MODEL: "llama3.2:latest"
+  OLLAMA_API_URL: "http://ollama-service:11434"
+
+  # Sync settings
+  SYNC_INTERVAL: "3600"

@@ -1,0 +1,109 @@
+# Finance RAG - Google Cloud Run Configuration
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: finance-rag-api
+  labels:
+    cloud.googleapis.com/location: asia-northeast3
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "false"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 100
+      timeoutSeconds: 300
+      serviceAccountName: finance-rag-sa@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - name: api
+          image: gcr.io/PROJECT_ID/finance-rag-api:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: APP_ENV
+              value: production
+            - name: LOG_LEVEL
+              value: INFO
+            - name: CHROMA_DB_PATH
+              value: /app/db
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: redis-url
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: groq-api-key
+            - name: DART_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: dart-api-key
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 10
+          volumeMounts:
+            - name: chroma-data
+              mountPath: /app/db
+      volumes:
+        - name: chroma-data
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            volumeAttributes:
+              bucketName: finance-rag-data
+              mountOptions: "implicit-dirs"
+---
+# Streamlit Service
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: finance-rag-streamlit
+  labels:
+    cloud.googleapis.com/location: asia-northeast3
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "5"
+    spec:
+      containerConcurrency: 50
+      timeoutSeconds: 300
+      containers:
+        - name: streamlit
+          image: gcr.io/PROJECT_ID/finance-rag-streamlit:latest
+          ports:
+            - containerPort: 8501
+          env:
+            - name: API_URL
+              value: https://finance-rag-api-xxxxx-an.a.run.app
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: latest
+                  name: groq-api-key
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi

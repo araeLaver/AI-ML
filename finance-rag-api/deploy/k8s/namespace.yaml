@@ -1,0 +1,8 @@
+# Finance RAG - Kubernetes Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finance-rag
+  labels:
+    app.kubernetes.io/name: finance-rag
+    app.kubernetes.io/part-of: finance-rag-system

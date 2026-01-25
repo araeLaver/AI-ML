@@ -1,0 +1,34 @@
+# Finance RAG - Kustomization
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: finance-rag
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secrets.yaml
+  - service-account.yaml
+  - pvc.yaml
+  - redis-deployment.yaml
+  - api-deployment.yaml
+  - streamlit-deployment.yaml
+  - worker-deployment.yaml
+  - hpa.yaml
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: finance-rag-system
+  app.kubernetes.io/managed-by: kustomize
+
+# Image customization
+images:
+  - name: finance-rag-api
+    newName: your-registry/finance-rag-api
+    newTag: latest
+  - name: finance-rag-streamlit
+    newName: your-registry/finance-rag-streamlit
+    newTag: latest
+  - name: finance-rag-worker
+    newName: your-registry/finance-rag-worker
+    newTag: latest

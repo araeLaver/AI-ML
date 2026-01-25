@@ -1,0 +1,69 @@
+{
+  "family": "finance-rag-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "2048",
+  "memory": "4096",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/finance-rag-task-role",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/finance-rag-api:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {"name": "APP_ENV", "value": "production"},
+        {"name": "LOG_LEVEL", "value": "INFO"},
+        {"name": "CHROMA_DB_PATH", "value": "/app/db"},
+        {"name": "REDIS_URL", "value": "redis://redis-cluster.xxxxx.cache.amazonaws.com:6379"}
+      ],
+      "secrets": [
+        {
+          "name": "GROQ_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:finance-rag/groq-api-key"
+        },
+        {
+          "name": "DART_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:finance-rag/dart-api-key"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "chroma-data",
+          "containerPath": "/app/db"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/finance-rag-api",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "api"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ],
+  "volumes": [
+    {
+      "name": "chroma-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-xxxxx",
+        "rootDirectory": "/finance-rag/chroma",
+        "transitEncryption": "ENABLED"
+      }
+    }
+  ]
+}
