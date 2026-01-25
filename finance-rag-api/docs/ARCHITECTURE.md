@@ -185,6 +185,12 @@ finance-rag-api/
 │   │   ├── config.py             # 설정 관리 (Pydantic Settings)
 │   │   └── exceptions.py         # 커스텀 예외 정의
 │   │
+│   ├── realtime/                 # 실시간 기능 (Phase 6)
+│   │   ├── __init__.py
+│   │   ├── dart_sync.py          # DART API 실시간 동기화
+│   │   ├── websocket_manager.py  # WebSocket 알림 관리
+│   │   └── streaming.py          # SSE 스트리밍 응답
+│   │
 │   └── models/                   # 데이터 모델
 │       ├── __init__.py
 │       ├── document.py           # 문서 스키마
@@ -513,6 +519,88 @@ class DARTCollector:
 │                                     │   (VectorStore)  │   │
 │                                     └──────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
+```
+
+### 4.5 실시간 기능 (`src/realtime/`)
+
+#### DART 실시간 동기화
+
+```python
+class DARTSyncScheduler:
+    """DART 공시 실시간 동기화 스케줄러"""
+
+    def __init__(self, config: SyncConfig = None):
+        self.config = config or SyncConfig(
+            interval_hours=1,      # 매시간 동기화
+            daily_time="09:00",    # 매일 09:00 전체 동기화
+            lookback_days=1,       # 1일 전 공시부터 확인
+        )
+
+    def sync_now(self) -> SyncResult:
+        """즉시 동기화 실행 (차분 동기화)"""
+```
+
+#### WebSocket 알림 관리
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  WebSocket 알림 아키텍처                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐     ┌─────────────────────────────────┐   │
+│  │ DART Sync   │────▶│      WebSocketManager           │   │
+│  │ Scheduler   │     │  ┌────────────────────────────┐ │   │
+│  └─────────────┘     │  │     Subscription Filter    │ │   │
+│                      │  │  - company: 회사별 구독    │ │   │
+│  ┌─────────────┐     │  │  - report_type: 유형별    │ │   │
+│  │ New         │────▶│  │  - all: 전체 구독         │ │   │
+│  │ Disclosure  │     │  └────────────────────────────┘ │   │
+│  └─────────────┘     │              │                   │   │
+│                      │              ▼                   │   │
+│                      │  ┌────────────────────────────┐ │   │
+│                      │  │   Broadcast to Clients     │ │   │
+│                      │  │  [Client1, Client2, ...]   │ │   │
+│                      │  └────────────────────────────┘ │   │
+│                      └─────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### SSE 스트리밍 응답
+
+```python
+class StreamingRAGService:
+    """SSE 기반 RAG 응답 스트리밍"""
+
+    async def stream_query(self, query: str) -> AsyncGenerator[StreamChunk, None]:
+        """
+        RAG 응답을 청크 단위로 스트리밍
+
+        이벤트 순서:
+        1. START: 스트림 시작 (stream_id, query)
+        2. CHUNK: 텍스트 청크 (text, index)
+        3. SOURCE: 소스 문서 (sources)
+        4. METADATA: 메타데이터 (duration_ms)
+        5. END: 스트림 종료
+        """
+```
+
+**SSE 이벤트 형식:**
+```
+event: start
+data: {"stream_id": "abc123", "query": "삼성전자 실적"}
+id: chunk-001
+
+event: chunk
+data: {"text": "삼성전자의 ", "index": 0}
+id: chunk-002
+
+event: source
+data: {"sources": [{"title": "분기보고서", "score": 0.95}]}
+id: chunk-010
+
+event: end
+data: {"stream_id": "abc123", "duration_ms": 1150}
+id: chunk-011
 ```
 
 ---

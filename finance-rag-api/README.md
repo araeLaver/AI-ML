@@ -212,12 +212,16 @@ finance-rag-api/
 │   ├── core/
 │   │   ├── config.py           # 설정 관리
 │   │   └── exceptions.py       # 예외 처리
+│   ├── realtime/
+│   │   ├── dart_sync.py        # DART API 실시간 동기화
+│   │   ├── websocket_manager.py # WebSocket 알림 관리
+│   │   └── streaming.py        # SSE 스트리밍 응답
 │   └── api/
 │       ├── routes/             # FastAPI 라우터
 │       └── deps.py             # 의존성 주입
 ├── app/
 │   └── streamlit_app.py        # Streamlit 데모 UI
-├── tests/                      # pytest 테스트 (35개)
+├── tests/                      # pytest 테스트 (80+개)
 └── docs/                       # 기술 문서
 ```
 
@@ -313,11 +317,53 @@ rrf_score = sum(1 / (k + rank) for method in [vector, bm25])
 
 ---
 
+## 실시간 기능 (Phase 6)
+
+### 실시간 공시 연동
+
+DART API와 실시간으로 연동하여 새 공시를 자동으로 수집합니다:
+
+```python
+from src.realtime import start_sync_scheduler, get_sync_status
+
+# 스케줄러 시작 (매시간 동기화)
+start_sync_scheduler()
+
+# 상태 확인
+status = get_sync_status()
+print(f"마지막 동기화: {status['last_sync']}")
+```
+
+### WebSocket 실시간 알림
+
+새 공시 발생 시 연결된 클라이언트에게 실시간 알림:
+
+```python
+from src.realtime import WebSocketManager, subscribe_to_company
+
+# 회사별 구독
+await subscribe_to_company(connection_id, "00126380")  # 삼성전자
+```
+
+### SSE 스트리밍 응답
+
+LLM 응답을 실시간으로 스트리밍하여 사용자 경험 개선:
+
+```python
+from src.realtime import stream_rag_response, create_sse_response
+
+async def stream_query(query: str):
+    generator = stream_rag_response(query, rag_service)
+    return create_sse_response(generator)
+```
+
+---
+
 ## 향후 개선 계획
 
 - [ ] **Fine-tuned Embedding**: 금융 도메인 특화 임베딩 모델
 - [ ] **Query Expansion**: 금융 동의어 확장 (PER ↔ 주가수익비율)
-- [ ] **Real-time Update**: 실시간 공시 연동
+- [x] **Real-time Update**: 실시간 공시 연동 ✅
 - [ ] **Multi-modal**: 공시 내 표/차트 인식
 
 ---
