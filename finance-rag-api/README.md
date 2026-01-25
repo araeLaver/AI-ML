@@ -196,33 +196,39 @@ class RAGBenchmark:
 finance-rag-api/
 ├── src/
 │   ├── rag/
-│   │   ├── hybrid_search.py    # Hybrid Search + Kiwi 토크나이저
-│   │   ├── reranker.py         # Cross-Encoder Re-ranking
-│   │   ├── rag_service.py      # RAG 서비스 레이어
-│   │   ├── chunking.py         # 문서 청킹 전략
-│   │   ├── conversation.py     # 멀티턴 대화 관리
-│   │   ├── evaluation.py       # RAG 평가 지표
-│   │   ├── benchmark.py        # 벤치마크 프레임워크
-│   │   └── llm_provider.py     # LLM 추상화 레이어
+│   │   ├── hybrid_search.py       # Hybrid Search + Kiwi 토크나이저
+│   │   ├── reranker.py            # Cross-Encoder Re-ranking
+│   │   ├── rag_service.py         # RAG 서비스 레이어
+│   │   ├── chunking.py            # 문서 청킹 전략
+│   │   ├── conversation.py        # 멀티턴 대화 관리
+│   │   ├── evaluation.py          # RAG 평가 지표
+│   │   ├── benchmark.py           # 벤치마크 프레임워크
+│   │   ├── llm_provider.py        # LLM 추상화 레이어
+│   │   ├── query_expansion.py     # 금융 동의어 확장
+│   │   ├── ab_testing.py          # A/B 테스트 프레임워크
+│   │   ├── fine_tuned_embedding.py # 금융 특화 임베딩
+│   │   ├── multimodal.py          # 표/차트 추출
+│   │   ├── llm_finetuning.py      # LLM Fine-tuning (LoRA)
+│   │   └── knowledge_graph.py     # Knowledge Graph
 │   ├── data/
-│   │   ├── dart_collector.py   # DART 공시 수집
-│   │   ├── news_collector.py   # 금융 뉴스 수집
-│   │   ├── load_to_rag.py      # RAG 데이터 로더
+│   │   ├── dart_collector.py      # DART 공시 수집
+│   │   ├── news_collector.py      # 금융 뉴스 수집
+│   │   ├── load_to_rag.py         # RAG 데이터 로더
 │   │   └── evaluation_dataset.py  # 100개 평가 데이터
 │   ├── core/
-│   │   ├── config.py           # 설정 관리
-│   │   └── exceptions.py       # 예외 처리
+│   │   ├── config.py              # 설정 관리
+│   │   └── exceptions.py          # 예외 처리
 │   ├── realtime/
-│   │   ├── dart_sync.py        # DART API 실시간 동기화
-│   │   ├── websocket_manager.py # WebSocket 알림 관리
-│   │   └── streaming.py        # SSE 스트리밍 응답
+│   │   ├── dart_sync.py           # DART API 실시간 동기화
+│   │   ├── websocket_manager.py   # WebSocket 알림 관리
+│   │   └── streaming.py           # SSE 스트리밍 응답
 │   └── api/
-│       ├── routes/             # FastAPI 라우터
-│       └── deps.py             # 의존성 주입
+│       ├── routes/                # FastAPI 라우터
+│       └── deps.py                # 의존성 주입
 ├── app/
-│   └── streamlit_app.py        # Streamlit 데모 UI
-├── tests/                      # pytest 테스트 (80+개)
-└── docs/                       # 기술 문서
+│   └── streamlit_app.py           # Streamlit 데모 UI
+├── tests/                         # pytest 테스트 (100+개)
+└── docs/                          # 기술 문서
 ```
 
 ---
@@ -406,6 +412,76 @@ processor = MultiModalProcessor()
 extracted = processor.process_document(html_content, "html")
 ```
 
+### LLM Fine-tuning
+
+금융 QA 특화 LLM 학습을 위한 프레임워크:
+
+```python
+from src.rag.llm_finetuning import (
+    FinanceLLMTrainer,
+    FinanceQAGenerator,
+    FineTuneConfig,
+    FineTuneMethod,
+)
+
+# QA 데이터셋 생성
+generator = FinanceQAGenerator()
+dataset = generator.generate_dataset(num_examples=1000)
+
+# Fine-tuning 설정
+config = FineTuneConfig(
+    base_model="beomi/llama-2-ko-7b",
+    method=FineTuneMethod.LORA,
+    lora_r=8,
+    lora_alpha=16,
+)
+
+# 학습 (LoRA 방식)
+trainer = FinanceLLMTrainer(config)
+trainer.train(train_dataset, eval_dataset)
+```
+
+**지원 모델:**
+- `llama-2-ko-7b`: 한국어 LLaMA 2 7B
+- `polyglot-ko-5.8b`: 한국어 Polyglot 5.8B
+- `kullm-polyglot-12.8b`: KULLM 12.8B
+- `mistral-7b`: Mistral 7B (다국어)
+
+**프롬프트 템플릿:**
+- Alpaca 형식: `### Instruction: ... ### Response:`
+- ChatML 형식: `<|im_start|>user ... <|im_end|>`
+
+### Knowledge Graph
+
+기업 관계, 산업 구조를 그래프로 모델링하여 RAG를 강화합니다:
+
+```python
+from src.rag.knowledge_graph import (
+    build_korean_finance_kg,
+    KGEnhancedRAG,
+)
+
+# 한국 금융 Knowledge Graph 생성
+kg = build_korean_finance_kg()
+
+# KG 기반 RAG 강화
+rag = KGEnhancedRAG(kg)
+
+# 쿼리 확장
+result = rag.expand_query_with_kg("삼성전자 경쟁사 실적")
+# mentioned_entities: ["삼성전자"]
+# related_entities: ["SK하이닉스", "반도체"]
+
+# 기업 간 연결 탐색
+connection = rag.find_connections("삼성전자", "반도체")
+# "삼성전자과 반도체의 연결: 삼성전자 -> 반도체"
+```
+
+**Knowledge Graph 구성:**
+- **엔티티**: 기업(COMPANY), 인물(PERSON), 산업(INDUSTRY), 제품(PRODUCT)
+- **관계**: 자회사(SUBSIDIARY), 경쟁사(COMPETITOR), 협력사(PARTNER), 속함(BELONGS_TO)
+- **한국 주요 기업**: 삼성전자, SK하이닉스, LG에너지솔루션, 현대차, 네이버, 카카오
+
 ---
 
 ## 향후 개선 계획
@@ -414,8 +490,8 @@ extracted = processor.process_document(html_content, "html")
 - [x] **Query Expansion**: 금융 동의어 확장 (PER ↔ 주가수익비율) ✅
 - [x] **Real-time Update**: 실시간 공시 연동 ✅
 - [x] **Multi-modal**: 공시 내 표/차트 인식 ✅
-- [ ] **LLM Fine-tuning**: 금융 QA 특화 LLM 학습
-- [ ] **Knowledge Graph**: 기업 관계 그래프 구축
+- [x] **LLM Fine-tuning**: 금융 QA 특화 LLM 학습 ✅
+- [x] **Knowledge Graph**: 기업 관계 그래프 구축 ✅
 
 ---
 

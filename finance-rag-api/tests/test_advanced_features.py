@@ -793,6 +793,690 @@ class TestIntegration:
         assert embeddings.shape[0] == 1
 
 
+# ============================================================================
+# LLM Fine-tuning Tests
+# ============================================================================
+
+class TestFineTuneConfigLLM:
+    """FineTuneConfig (LLM) 테스트"""
+
+    def test_default_config(self):
+        """기본 설정 테스트"""
+        from src.rag.llm_finetuning import FineTuneConfig
+
+        config = FineTuneConfig()
+        assert config.epochs == 3
+        assert config.batch_size == 4
+        assert config.lora_r == 8
+        assert config.lora_alpha == 16
+
+    def test_recommended_models(self):
+        """추천 모델 목록 테스트"""
+        from src.rag.llm_finetuning import FineTuneConfig
+
+        assert "llama-2-ko-7b" in FineTuneConfig.RECOMMENDED_MODELS
+        assert "polyglot-ko-5.8b" in FineTuneConfig.RECOMMENDED_MODELS
+        assert "mistral-7b" in FineTuneConfig.RECOMMENDED_MODELS
+
+    def test_finetune_method_enum(self):
+        """Fine-tune 방법 열거형 테스트"""
+        from src.rag.llm_finetuning import FineTuneMethod
+
+        assert FineTuneMethod.LORA.value == "lora"
+        assert FineTuneMethod.QLORA.value == "qlora"
+        assert FineTuneMethod.FULL.value == "full"
+
+
+class TestQAExample:
+    """QAExample 테스트"""
+
+    def test_create_example(self):
+        """예제 생성 테스트"""
+        from src.rag.llm_finetuning import QAExample
+
+        example = QAExample(
+            instruction="삼성전자 실적은?",
+            input="삼성전자 영업이익 6조원",
+            output="삼성전자는 영업이익 6조원을 달성했습니다.",
+        )
+
+        assert example.instruction == "삼성전자 실적은?"
+        assert example.output.endswith("달성했습니다.")
+
+    def test_to_alpaca_prompt(self):
+        """Alpaca 프롬프트 변환 테스트"""
+        from src.rag.llm_finetuning import QAExample
+
+        example = QAExample(
+            instruction="질문입니다",
+            input="컨텍스트입니다",
+            output="답변입니다",
+        )
+
+        prompt = example.to_prompt("alpaca")
+        assert "### Instruction:" in prompt
+        assert "### Input:" in prompt
+        assert "### Response:" in prompt
+
+    def test_to_chatml_prompt(self):
+        """ChatML 프롬프트 변환 테스트"""
+        from src.rag.llm_finetuning import QAExample
+
+        example = QAExample(
+            instruction="질문입니다",
+            input="컨텍스트입니다",
+            output="답변입니다",
+        )
+
+        prompt = example.to_prompt("chatml")
+        assert "<|im_start|>system" in prompt
+        assert "<|im_start|>user" in prompt
+        assert "<|im_start|>assistant" in prompt
+
+    def test_to_simple_prompt(self):
+        """단순 프롬프트 변환 테스트"""
+        from src.rag.llm_finetuning import QAExample
+
+        example = QAExample(
+            instruction="질문",
+            input="컨텍스트",
+            output="답변",
+        )
+
+        prompt = example.to_prompt("simple")
+        assert "질문:" in prompt
+        assert "답변:" in prompt
+
+
+class TestFinanceQADataset:
+    """FinanceQADataset 테스트"""
+
+    def test_add_example(self):
+        """예제 추가 테스트"""
+        from src.rag.llm_finetuning import FinanceQADataset
+
+        dataset = FinanceQADataset(name="test")
+        dataset.add_example(
+            instruction="질문1",
+            input="컨텍스트1",
+            output="답변1",
+        )
+
+        assert len(dataset) == 1
+        assert dataset.examples[0].instruction == "질문1"
+
+    def test_to_json(self):
+        """JSON 저장 테스트"""
+        from src.rag.llm_finetuning import FinanceQADataset
+
+        dataset = FinanceQADataset(name="test")
+        dataset.add_example("q1", "i1", "o1")
+        dataset.add_example("q2", "i2", "o2")
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            temp_path = f.name
+
+        try:
+            dataset.to_json(temp_path)
+            with open(temp_path, 'r', encoding='utf-8') as rf:
+                data = json.load(rf)
+
+            assert len(data) == 2
+            assert data[0]["instruction"] == "q1"
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def test_from_json(self):
+        """JSON 로드 테스트"""
+        from src.rag.llm_finetuning import FinanceQADataset
+
+        data = [
+            {"instruction": "q1", "input": "i1", "output": "o1", "source": "test"},
+        ]
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+            f.flush()
+            temp_path = f.name
+
+        try:
+            dataset = FinanceQADataset.from_json(temp_path)
+            assert len(dataset) == 1
+            assert dataset.examples[0].instruction == "q1"
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def test_split(self):
+        """데이터셋 분할 테스트"""
+        from src.rag.llm_finetuning import FinanceQADataset
+
+        dataset = FinanceQADataset(name="test")
+        for i in range(10):
+            dataset.add_example(f"q{i}", f"i{i}", f"o{i}")
+
+        train, val = dataset.split(train_ratio=0.8)
+        assert len(train) == 8
+        assert len(val) == 2
+
+
+class TestFinanceQAGenerator:
+    """FinanceQAGenerator 테스트"""
+
+    def test_generate_dataset(self):
+        """데이터셋 생성 테스트"""
+        from src.rag.llm_finetuning import FinanceQAGenerator
+
+        generator = FinanceQAGenerator()
+        dataset = generator.generate_dataset(num_examples=20)
+
+        assert len(dataset) == 20
+        assert dataset.examples[0].instruction is not None
+
+    def test_generate_from_documents(self):
+        """문서 기반 데이터셋 생성 테스트"""
+        from src.rag.llm_finetuning import FinanceQAGenerator
+
+        generator = FinanceQAGenerator()
+        documents = [
+            {"content": "삼성전자 실적 내용", "metadata": {"corp_name": "삼성전자"}},
+            {"content": "SK하이닉스 실적 내용", "metadata": {"corp_name": "SK하이닉스"}},
+        ]
+
+        dataset = generator.generate_from_documents(documents, questions_per_doc=2)
+        assert len(dataset) == 4
+
+
+class TestFinanceLLMTrainer:
+    """FinanceLLMTrainer 테스트"""
+
+    def test_init(self):
+        """초기화 테스트"""
+        from src.rag.llm_finetuning import FinanceLLMTrainer, FineTuneConfig
+
+        config = FineTuneConfig(base_model="test-model")
+        trainer = FinanceLLMTrainer(config=config)
+
+        assert trainer.config.base_model == "test-model"
+
+    def test_init_default_config(self):
+        """기본 설정 초기화 테스트"""
+        from src.rag.llm_finetuning import FinanceLLMTrainer
+
+        trainer = FinanceLLMTrainer()
+        assert trainer.config is not None
+
+
+class TestFinanceLLM:
+    """FinanceLLM 테스트"""
+
+    def test_init_api(self):
+        """API 모드 초기화 테스트"""
+        from src.rag.llm_finetuning import FinanceLLM
+
+        llm = FinanceLLM(use_api=True, api_provider="groq")
+        assert llm.use_api is True
+        assert llm.api_provider == "groq"
+
+    def test_init_local(self):
+        """로컬 모드 초기화 테스트"""
+        from src.rag.llm_finetuning import FinanceLLM
+
+        llm = FinanceLLM(model_path="./test-model")
+        assert llm.model_path == "./test-model"
+        assert llm.use_api is False
+
+    def test_answer_api(self):
+        """API 답변 테스트"""
+        from src.rag.llm_finetuning import FinanceLLM
+
+        llm = FinanceLLM(use_api=True)
+        answer = llm.answer("테스트 질문", "테스트 컨텍스트")
+
+        assert "[API 응답]" in answer
+
+    def test_answer_local_no_model(self):
+        """로컬 모델 미설정 테스트"""
+        from src.rag.llm_finetuning import FinanceLLM
+
+        llm = FinanceLLM(use_api=False)
+        answer = llm.answer("테스트 질문")
+
+        assert "[로컬 모델 미설정]" in answer
+
+
+class TestLLMFinetuningHelpers:
+    """LLM Fine-tuning 헬퍼 함수 테스트"""
+
+    def test_generate_qa_dataset(self):
+        """generate_qa_dataset 테스트"""
+        from src.rag.llm_finetuning import generate_qa_dataset
+
+        dataset = generate_qa_dataset(num_examples=10)
+        assert len(dataset) == 10
+
+    def test_create_finance_llm(self):
+        """create_finance_llm 테스트"""
+        from src.rag.llm_finetuning import create_finance_llm
+
+        llm = create_finance_llm(use_api=True)
+        assert llm.use_api is True
+
+
+# ============================================================================
+# Knowledge Graph Tests
+# ============================================================================
+
+class TestEntityType:
+    """EntityType 테스트"""
+
+    def test_entity_types(self):
+        """엔티티 유형 테스트"""
+        from src.rag.knowledge_graph import EntityType
+
+        assert EntityType.COMPANY.value == "company"
+        assert EntityType.PERSON.value == "person"
+        assert EntityType.INDUSTRY.value == "industry"
+
+
+class TestRelationType:
+    """RelationType 테스트"""
+
+    def test_relation_types(self):
+        """관계 유형 테스트"""
+        from src.rag.knowledge_graph import RelationType
+
+        assert RelationType.SUBSIDIARY.value == "subsidiary"
+        assert RelationType.COMPETITOR.value == "competitor"
+        assert RelationType.BELONGS_TO.value == "belongs_to"
+
+
+class TestEntity:
+    """Entity 테스트"""
+
+    def test_create_entity(self):
+        """엔티티 생성 테스트"""
+        from src.rag.knowledge_graph import Entity, EntityType
+
+        entity = Entity(
+            entity_id="samsung",
+            name="삼성전자",
+            entity_type=EntityType.COMPANY,
+            properties={"market_cap": "400조"},
+        )
+
+        assert entity.entity_id == "samsung"
+        assert entity.name == "삼성전자"
+        assert entity.entity_type == EntityType.COMPANY
+
+    def test_to_dict(self):
+        """딕셔너리 변환 테스트"""
+        from src.rag.knowledge_graph import Entity, EntityType
+
+        entity = Entity(
+            entity_id="samsung",
+            name="삼성전자",
+            entity_type=EntityType.COMPANY,
+        )
+
+        d = entity.to_dict()
+        assert d["entity_id"] == "samsung"
+        assert d["entity_type"] == "company"
+
+    def test_from_dict(self):
+        """딕셔너리에서 생성 테스트"""
+        from src.rag.knowledge_graph import Entity, EntityType
+
+        data = {
+            "entity_id": "samsung",
+            "name": "삼성전자",
+            "entity_type": "company",
+            "properties": {"market_cap": "400조"},
+        }
+
+        entity = Entity.from_dict(data)
+        assert entity.entity_id == "samsung"
+        assert entity.entity_type == EntityType.COMPANY
+
+
+class TestRelation:
+    """Relation 테스트"""
+
+    def test_create_relation(self):
+        """관계 생성 테스트"""
+        from src.rag.knowledge_graph import Relation, RelationType
+
+        relation = Relation(
+            source_id="samsung",
+            target_id="semiconductor",
+            relation_type=RelationType.BELONGS_TO,
+        )
+
+        assert relation.source_id == "samsung"
+        assert relation.relation_type == RelationType.BELONGS_TO
+
+    def test_to_dict(self):
+        """딕셔너리 변환 테스트"""
+        from src.rag.knowledge_graph import Relation, RelationType
+
+        relation = Relation(
+            source_id="samsung",
+            target_id="sk",
+            relation_type=RelationType.COMPETITOR,
+            weight=0.8,
+        )
+
+        d = relation.to_dict()
+        assert d["relation_type"] == "competitor"
+        assert d["weight"] == 0.8
+
+    def test_from_dict(self):
+        """딕셔너리에서 생성 테스트"""
+        from src.rag.knowledge_graph import Relation, RelationType
+
+        data = {
+            "source_id": "samsung",
+            "target_id": "sk",
+            "relation_type": "competitor",
+            "weight": 0.9,
+        }
+
+        relation = Relation.from_dict(data)
+        assert relation.relation_type == RelationType.COMPETITOR
+        assert relation.weight == 0.9
+
+
+class TestFinanceKnowledgeGraph:
+    """FinanceKnowledgeGraph 테스트"""
+
+    def test_add_entity(self):
+        """엔티티 추가 테스트"""
+        from src.rag.knowledge_graph import FinanceKnowledgeGraph, Entity, EntityType
+
+        kg = FinanceKnowledgeGraph()
+        entity = Entity(
+            entity_id="samsung",
+            name="삼성전자",
+            entity_type=EntityType.COMPANY,
+        )
+        kg.add_entity(entity)
+
+        assert kg.num_entities == 1
+
+    def test_add_relation(self):
+        """관계 추가 테스트"""
+        from src.rag.knowledge_graph import (
+            FinanceKnowledgeGraph, Entity, Relation, EntityType, RelationType
+        )
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+        kg.add_entity(Entity("semiconductor", "반도체", EntityType.INDUSTRY))
+
+        relation = Relation("samsung", "semiconductor", RelationType.BELONGS_TO)
+        kg.add_relation(relation)
+
+        assert kg.num_relations == 1
+
+    def test_add_relation_missing_entity(self):
+        """존재하지 않는 엔티티에 대한 관계 추가 테스트"""
+        from src.rag.knowledge_graph import (
+            FinanceKnowledgeGraph, Entity, Relation, EntityType, RelationType
+        )
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+
+        # target이 없음
+        relation = Relation("samsung", "nonexistent", RelationType.BELONGS_TO)
+        kg.add_relation(relation)
+
+        assert kg.num_relations == 0  # 추가되지 않음
+
+    def test_get_entity(self):
+        """엔티티 조회 테스트"""
+        from src.rag.knowledge_graph import FinanceKnowledgeGraph, Entity, EntityType
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+
+        entity = kg.get_entity("samsung")
+        assert entity is not None
+        assert entity.name == "삼성전자"
+
+        assert kg.get_entity("nonexistent") is None
+
+    def test_get_entity_by_name(self):
+        """이름으로 엔티티 조회 테스트"""
+        from src.rag.knowledge_graph import FinanceKnowledgeGraph, Entity, EntityType
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+
+        entity = kg.get_entity_by_name("삼성전자")
+        assert entity is not None
+        assert entity.entity_id == "samsung"
+
+    def test_get_entities_by_type(self):
+        """유형별 엔티티 조회 테스트"""
+        from src.rag.knowledge_graph import FinanceKnowledgeGraph, Entity, EntityType
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+        kg.add_entity(Entity("sk", "SK하이닉스", EntityType.COMPANY))
+        kg.add_entity(Entity("semiconductor", "반도체", EntityType.INDUSTRY))
+
+        companies = kg.get_entities_by_type(EntityType.COMPANY)
+        assert len(companies) == 2
+
+    def test_get_relations(self):
+        """관계 조회 테스트"""
+        from src.rag.knowledge_graph import (
+            FinanceKnowledgeGraph, Entity, Relation, EntityType, RelationType
+        )
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+        kg.add_entity(Entity("semiconductor", "반도체", EntityType.INDUSTRY))
+        kg.add_entity(Entity("sk", "SK하이닉스", EntityType.COMPANY))
+
+        kg.add_relation(Relation("samsung", "semiconductor", RelationType.BELONGS_TO))
+        kg.add_relation(Relation("samsung", "sk", RelationType.COMPETITOR))
+
+        relations = kg.get_relations(source_id="samsung")
+        assert len(relations) == 2
+
+    def test_get_neighbors(self):
+        """이웃 조회 테스트"""
+        from src.rag.knowledge_graph import (
+            FinanceKnowledgeGraph, Entity, Relation, EntityType, RelationType
+        )
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+        kg.add_entity(Entity("sk", "SK하이닉스", EntityType.COMPANY))
+        kg.add_entity(Entity("semiconductor", "반도체", EntityType.INDUSTRY))
+
+        kg.add_relation(Relation("samsung", "semiconductor", RelationType.BELONGS_TO))
+        kg.add_relation(Relation("samsung", "sk", RelationType.COMPETITOR))
+
+        neighbors = kg.get_neighbors("samsung", direction="out")
+        assert len(neighbors) == 2
+
+    def test_stats(self):
+        """통계 테스트"""
+        from src.rag.knowledge_graph import FinanceKnowledgeGraph, Entity, EntityType
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+        kg.add_entity(Entity("sk", "SK하이닉스", EntityType.COMPANY))
+
+        stats = kg.stats
+        assert stats["num_entities"] == 2
+        assert stats["entity_counts"]["company"] == 2
+
+    def test_to_context(self):
+        """컨텍스트 생성 테스트"""
+        from src.rag.knowledge_graph import (
+            FinanceKnowledgeGraph, Entity, Relation, EntityType, RelationType
+        )
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity(
+            "samsung", "삼성전자", EntityType.COMPANY,
+            properties={"market_cap": "400조"}
+        ))
+        kg.add_entity(Entity("semiconductor", "반도체", EntityType.INDUSTRY))
+        kg.add_relation(Relation("samsung", "semiconductor", RelationType.BELONGS_TO))
+
+        context = kg.to_context("samsung")
+        assert "삼성전자" in context
+        assert "market_cap" in context
+        assert "반도체" in context
+
+    def test_save_and_load(self):
+        """저장 및 로드 테스트"""
+        from src.rag.knowledge_graph import FinanceKnowledgeGraph, Entity, EntityType
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as f:
+            temp_path = f.name
+
+        try:
+            kg.save(temp_path)
+
+            loaded_kg = FinanceKnowledgeGraph.load(temp_path)
+            assert loaded_kg.num_entities == 1
+            assert loaded_kg.get_entity("samsung").name == "삼성전자"
+        finally:
+            Path(temp_path).unlink(missing_ok=True)
+
+    def test_get_path(self):
+        """경로 탐색 테스트"""
+        from src.rag.knowledge_graph import (
+            FinanceKnowledgeGraph, Entity, Relation, EntityType, RelationType
+        )
+
+        kg = FinanceKnowledgeGraph()
+        kg.add_entity(Entity("samsung", "삼성전자", EntityType.COMPANY))
+        kg.add_entity(Entity("sk", "SK하이닉스", EntityType.COMPANY))
+        kg.add_entity(Entity("semiconductor", "반도체", EntityType.INDUSTRY))
+
+        kg.add_relation(Relation("samsung", "semiconductor", RelationType.BELONGS_TO))
+        kg.add_relation(Relation("sk", "semiconductor", RelationType.BELONGS_TO))
+
+        paths = kg.get_path("samsung", "semiconductor")
+        assert len(paths) >= 1
+        assert paths[0] == ["samsung", "semiconductor"]
+
+
+class TestKoreanFinanceKGBuilder:
+    """KoreanFinanceKGBuilder 테스트"""
+
+    def test_build(self):
+        """KG 빌드 테스트"""
+        from src.rag.knowledge_graph import KoreanFinanceKGBuilder
+
+        builder = KoreanFinanceKGBuilder()
+        kg = builder.build()
+
+        assert kg.num_entities > 0
+        assert kg.num_relations > 0
+
+        # 주요 기업 존재 확인
+        samsung = kg.get_entity_by_name("삼성전자")
+        assert samsung is not None
+
+        sk = kg.get_entity_by_name("SK하이닉스")
+        assert sk is not None
+
+    def test_major_companies(self):
+        """주요 기업 데이터 테스트"""
+        from src.rag.knowledge_graph import KoreanFinanceKGBuilder
+
+        assert len(KoreanFinanceKGBuilder.MAJOR_COMPANIES) >= 6
+        assert any(c["name"] == "삼성전자" for c in KoreanFinanceKGBuilder.MAJOR_COMPANIES)
+
+    def test_industries(self):
+        """산업 데이터 테스트"""
+        from src.rag.knowledge_graph import KoreanFinanceKGBuilder
+
+        assert len(KoreanFinanceKGBuilder.INDUSTRIES) >= 4
+        assert any(i["name"] == "반도체" for i in KoreanFinanceKGBuilder.INDUSTRIES)
+
+
+class TestKGEnhancedRAG:
+    """KGEnhancedRAG 테스트"""
+
+    def test_expand_query_with_kg(self):
+        """KG 기반 쿼리 확장 테스트"""
+        from src.rag.knowledge_graph import KGEnhancedRAG, build_korean_finance_kg
+
+        kg = build_korean_finance_kg()
+        rag = KGEnhancedRAG(kg)
+
+        result = rag.expand_query_with_kg("삼성전자 실적")
+
+        assert "삼성전자" in result["mentioned_entities"]
+        assert result["expanded_query"] is not None
+
+    def test_get_context_from_kg(self):
+        """KG 기반 컨텍스트 추출 테스트"""
+        from src.rag.knowledge_graph import KGEnhancedRAG, build_korean_finance_kg
+
+        kg = build_korean_finance_kg()
+        rag = KGEnhancedRAG(kg)
+
+        context = rag.get_context_from_kg("삼성전자 영업이익")
+        assert "삼성전자" in context
+
+    def test_find_connections(self):
+        """연결 탐색 테스트"""
+        from src.rag.knowledge_graph import KGEnhancedRAG, build_korean_finance_kg
+
+        kg = build_korean_finance_kg()
+        rag = KGEnhancedRAG(kg)
+
+        result = rag.find_connections("삼성전자", "반도체")
+        assert result is not None
+        assert "연결" in result or "찾지 못했습니다" in result
+
+    def test_find_connections_not_found(self):
+        """연결 없음 테스트"""
+        from src.rag.knowledge_graph import KGEnhancedRAG, build_korean_finance_kg
+
+        kg = build_korean_finance_kg()
+        rag = KGEnhancedRAG(kg)
+
+        result = rag.find_connections("존재하지않는회사", "반도체")
+        assert result is None
+
+
+class TestKnowledgeGraphHelpers:
+    """Knowledge Graph 헬퍼 함수 테스트"""
+
+    def test_build_korean_finance_kg(self):
+        """build_korean_finance_kg 테스트"""
+        from src.rag.knowledge_graph import build_korean_finance_kg
+
+        kg = build_korean_finance_kg()
+        assert kg.num_entities > 0
+
+    def test_get_entity_context(self):
+        """get_entity_context 테스트"""
+        from src.rag.knowledge_graph import build_korean_finance_kg, get_entity_context
+
+        kg = build_korean_finance_kg()
+        context = get_entity_context(kg, "삼성전자")
+
+        assert "삼성전자" in context
+
+
+# ============================================================================
+# Module Import Tests
+# ============================================================================
+
 class TestModuleImports:
     """모듈 임포트 테스트"""
 
@@ -845,3 +1529,33 @@ class TestModuleImports:
             process_document,
         )
         assert MultiModalProcessor is not None
+
+    def test_import_llm_finetuning(self):
+        """LLM Fine-tuning 임포트 테스트"""
+        from src.rag.llm_finetuning import (
+            FineTuneMethod,
+            FineTuneConfig,
+            QAExample,
+            FinanceQADataset,
+            FinanceQAGenerator,
+            FinanceLLMTrainer,
+            FinanceLLM,
+            generate_qa_dataset,
+            create_finance_llm,
+        )
+        assert FinanceLLM is not None
+
+    def test_import_knowledge_graph(self):
+        """Knowledge Graph 임포트 테스트"""
+        from src.rag.knowledge_graph import (
+            EntityType,
+            RelationType,
+            Entity,
+            Relation,
+            FinanceKnowledgeGraph,
+            KoreanFinanceKGBuilder,
+            KGEnhancedRAG,
+            build_korean_finance_kg,
+            get_entity_context,
+        )
+        assert FinanceKnowledgeGraph is not None
