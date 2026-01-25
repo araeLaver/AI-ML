@@ -1,0 +1,138 @@
+# Finance RAG - Prometheus Alert Rules
+
+groups:
+  - name: finance-rag-api
+    rules:
+      # High query latency
+      - alert: HighQueryLatency
+        expr: histogram_quantile(0.95, rate(rag_query_latency_seconds_bucket[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High query latency detected"
+          description: "95th percentile query latency is above 5 seconds ({{ $value }}s)"
+
+      # Very high query latency
+      - alert: VeryHighQueryLatency
+        expr: histogram_quantile(0.95, rate(rag_query_latency_seconds_bucket[5m])) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Very high query latency detected"
+          description: "95th percentile query latency is above 10 seconds ({{ $value }}s)"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(rag_query_total{status="error"}[5m]) / rate(rag_query_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% ({{ $value | humanizePercentage }})"
+
+      # Critical error rate
+      - alert: CriticalErrorRate
+        expr: rate(rag_query_total{status="error"}[5m]) / rate(rag_query_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical error rate detected"
+          description: "Error rate is above 10% ({{ $value | humanizePercentage }})"
+
+      # Low cache hit rate
+      - alert: LowCacheHitRate
+        expr: rate(rag_cache_hits_total[5m]) / (rate(rag_cache_hits_total[5m]) + rate(rag_cache_misses_total[5m])) < 0.3
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "Low cache hit rate"
+          description: "Cache hit rate is below 30% ({{ $value | humanizePercentage }})"
+
+      # LLM API errors
+      - alert: LLMAPIErrors
+        expr: increase(llm_errors_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM API errors detected"
+          description: "More than 10 LLM API errors in the last 5 minutes"
+
+  - name: infrastructure
+    rules:
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 / 1024 > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 3GB ({{ $value | humanize }}GB)"
+
+      # Critical memory usage
+      - alert: CriticalMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 / 1024 > 3.5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is above 3.5GB ({{ $value | humanize }}GB)"
+
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: rate(process_cpu_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80%"
+
+      # Redis down
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance is not responding"
+
+      # API down
+      - alert: APIDown
+        expr: up{job="finance-rag-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API is down"
+          description: "Finance RAG API is not responding"
+
+  - name: vectordb
+    rules:
+      # High VectorDB query latency
+      - alert: HighVectorDBLatency
+        expr: histogram_quantile(0.95, rate(vectordb_query_latency_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High VectorDB query latency"
+          description: "VectorDB 95th percentile latency is above 1 second"
+
+      # VectorDB query errors
+      - alert: VectorDBErrors
+        expr: increase(vectordb_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "VectorDB errors detected"
+          description: "More than 5 VectorDB errors in the last 5 minutes"

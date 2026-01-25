@@ -1,0 +1,14 @@
+# Finance RAG - Grafana Dashboard Provisioning
+
+apiVersion: 1
+
+providers:
+  - name: 'Finance RAG Dashboards'
+    orgId: 1
+    folder: 'Finance RAG'
+    folderUid: 'finance-rag'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
