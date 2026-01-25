@@ -1,0 +1,192 @@
+# Code Quality Rules
+# These rules detect code quality and maintainability issues
+
+name: quality-rules
+version: "1.0.0"
+description: Code quality and maintainability rules
+
+metadata:
+  author: Code Review Agent
+  category: quality
+  last_updated: "2024-01-01"
+
+rules:
+  # ============================================================================
+  # Debug Statements
+  # ============================================================================
+  - id: QUAL-001
+    name: Python Print Statement
+    description: Detects print statements that may be debug leftovers
+    pattern: "\\bprint\\s*\\("
+    severity: info
+    languages: [python]
+    category: debug
+    recommendation: Remove print statements or use proper logging
+    tags: [debug, cleanup]
+
+  - id: QUAL-002
+    name: JavaScript Console Log
+    description: Detects console.log statements
+    pattern: "console\\.(log|debug|info|warn|error)\\s*\\("
+    severity: info
+    languages: [javascript, typescript]
+    category: debug
+    recommendation: Remove console statements or use a proper logging framework
+    tags: [debug, cleanup]
+
+  - id: QUAL-003
+    name: Java System.out
+    description: Detects System.out print statements
+    pattern: "System\\.(out|err)\\.(print|println)"
+    severity: info
+    languages: [java]
+    category: debug
+    recommendation: Use a logging framework like SLF4J or Log4j
+    tags: [debug, cleanup]
+
+  - id: QUAL-004
+    name: Go fmt.Print
+    description: Detects fmt.Print statements
+    pattern: "fmt\\.(Print|Printf|Println)\\s*\\("
+    severity: info
+    languages: [go]
+    category: debug
+    recommendation: Use a structured logging library like zerolog or zap
+    tags: [debug, cleanup]
+
+  # ============================================================================
+  # TODO Comments
+  # ============================================================================
+  - id: QUAL-010
+    name: TODO Comment
+    description: Detects TODO comments
+    pattern: "\\bTODO\\b"
+    severity: info
+    languages: [all]
+    category: maintenance
+    recommendation: Address TODO items before production release
+    tags: [todo, maintenance]
+
+  - id: QUAL-011
+    name: FIXME Comment
+    description: Detects FIXME comments indicating known issues
+    pattern: "\\bFIXME\\b"
+    severity: low
+    languages: [all]
+    category: maintenance
+    recommendation: Fix known issues before production release
+    tags: [fixme, maintenance]
+
+  - id: QUAL-012
+    name: HACK Comment
+    description: Detects HACK comments indicating workarounds
+    pattern: "\\bHACK\\b|\\bXXX\\b"
+    severity: low
+    languages: [all]
+    category: maintenance
+    recommendation: Replace hacky code with proper implementations
+    tags: [hack, maintenance]
+
+  # ============================================================================
+  # Error Handling
+  # ============================================================================
+  - id: QUAL-020
+    name: Empty Except Block (Python)
+    description: Detects empty except blocks that silently swallow errors
+    pattern: "except\\s*.*:\\s*\\n\\s*pass"
+    severity: medium
+    languages: [python]
+    category: error-handling
+    recommendation: Handle or log exceptions properly
+    tags: [exception, error-handling]
+
+  - id: QUAL-021
+    name: Bare Except (Python)
+    description: Detects bare except clauses that catch all exceptions
+    pattern: "except\\s*:"
+    severity: medium
+    languages: [python]
+    category: error-handling
+    recommendation: Catch specific exceptions instead of using bare except
+    tags: [exception, error-handling]
+
+  - id: QUAL-022
+    name: Generic Exception Catch (Java)
+    description: Detects catching generic Exception
+    pattern: "catch\\s*\\(\\s*Exception\\s+\\w+\\s*\\)"
+    severity: low
+    languages: [java]
+    category: error-handling
+    recommendation: Catch specific exceptions instead of generic Exception
+    tags: [exception, error-handling]
+
+  - id: QUAL-023
+    name: Ignored Error (Go)
+    description: Detects ignored errors in Go
+    pattern: "\\s*_\\s*[,=]\\s*\\w+\\(.*\\)"
+    severity: medium
+    languages: [go]
+    category: error-handling
+    recommendation: Handle errors properly instead of ignoring them
+    tags: [error, go]
+
+  - id: QUAL-024
+    name: Unwrap Without Error Handling (Rust)
+    description: Detects unwrap() calls that may panic
+    pattern: "\\.unwrap\\(\\)"
+    severity: low
+    languages: [rust]
+    category: error-handling
+    recommendation: Use proper error handling with match or ? operator
+    tags: [error, rust, panic]
+
+  # ============================================================================
+  # Type Safety
+  # ============================================================================
+  - id: QUAL-030
+    name: TypeScript Any Type
+    description: Detects usage of 'any' type in TypeScript
+    pattern: ":\\s*any\\b|<any>|as\\s+any"
+    severity: low
+    languages: [typescript]
+    category: type-safety
+    recommendation: Use specific types instead of 'any'
+    tags: [typescript, types]
+
+  - id: QUAL-031
+    name: TypeScript Ignore Directive
+    description: Detects @ts-ignore directives
+    pattern: "@ts-ignore|@ts-nocheck"
+    severity: low
+    languages: [typescript]
+    category: type-safety
+    recommendation: Fix type errors instead of ignoring them
+    tags: [typescript, types]
+
+  # ============================================================================
+  # Code Complexity
+  # ============================================================================
+  - id: QUAL-040
+    name: Long Function (Simple Check)
+    description: Detects potential long functions (heuristic)
+    pattern: "^(def|function|func|fn)\\s+\\w+.*\\{?$"
+    severity: info
+    languages: [all]
+    category: complexity
+    recommendation: Keep functions focused and under 50 lines
+    tags: [complexity, refactor]
+    enabled: false  # Disabled by default as it needs manual review
+
+  # ============================================================================
+  # Magic Numbers
+  # ============================================================================
+  - id: QUAL-050
+    name: Magic Number
+    description: Detects magic numbers that should be constants
+    pattern: "[^0-9a-zA-Z_]\\d{3,}[^0-9a-zA-Z_]"
+    severity: info
+    languages: [all]
+    category: maintainability
+    recommendation: Use named constants instead of magic numbers
+    tags: [magic-number, maintainability]
+    enabled: false  # Disabled by default due to false positives

@@ -4,7 +4,10 @@ AI-powered multi-agent code review system using LangChain and LangGraph.
 
 ## Features
 
-- **Multi-Agent Architecture**: Specialized agents for security, performance, and code style
+- **Multi-Agent Architecture**: Specialized agents for security, performance, code style, and OWASP
+- **OWASP Top 10 Analysis**: Comprehensive vulnerability detection with LLM and static analysis
+- **Custom YAML Rules**: Define your own organization-specific rules
+- **Multi-Language Support**: Enhanced analysis for Python, Java, Go, TypeScript, Rust
 - **Parallel Execution**: Agents run concurrently for faster reviews
 - **GitHub Integration**: Automatic PR reviews via webhooks
 - **REST API**: Direct code review endpoint for integration
@@ -18,6 +21,7 @@ AI-powered multi-agent code review system using LangChain and LangGraph.
 | **Security** | SQL/Command Injection, XSS, Auth issues, Data exposure, Cryptographic weaknesses |
 | **Performance** | Algorithm complexity, N+1 queries, Caching opportunities, Async optimization |
 | **Style** | Naming conventions, SOLID principles, DRY, Documentation, Code complexity |
+| **OWASP** | OWASP Top 10 (2021) vulnerability detection with both LLM and static analysis |
 
 ## Architecture
 
@@ -32,12 +36,12 @@ AI-powered multi-agent code review system using LangChain and LangGraph.
                                   |
                          Review Orchestrator
                                   |
-                    +-------------+-------------+
-                    |             |             |
-               Security      Performance     Style
-                Agent          Agent         Agent
-                    |             |             |
-                    +-------------+-------------+
+            +----------+----------+----------+---------+
+            |          |          |          |         |
+        Security  Performance   Style     OWASP    Custom
+         Agent      Agent       Agent     Agent    Rules
+            |          |          |          |         |
+            +----------+----------+----------+---------+
                                   |
                             Synthesizer
                                   |
@@ -181,23 +185,30 @@ code-review-agent/
 │   ├── security_agent.py     # Security vulnerability detection
 │   ├── performance_agent.py  # Performance analysis
 │   ├── style_agent.py        # Code quality review
+│   ├── owasp_agent.py        # OWASP Top 10 security analysis
 │   └── orchestrator.py       # Multi-agent coordination (parallel)
 ├── workflows/                 # LangGraph workflows
 │   ├── __init__.py
 │   └── review_workflow.py    # Review pipeline with error handling
 ├── tools/                     # Utility tools
 │   ├── __init__.py
-│   ├── code_analyzer.py      # Static code analysis
-│   └── github_tools.py       # GitHub API integration
+│   ├── code_analyzer.py      # Static code analysis (multi-language)
+│   ├── github_tools.py       # GitHub API integration
+│   └── rules_loader.py       # Custom YAML rules system
+├── rules/                     # Custom review rules (YAML)
+│   ├── security.yaml         # Security-focused rules
+│   └── quality.yaml          # Code quality rules
 ├── api/                       # FastAPI routes
 │   ├── __init__.py
 │   └── webhook.py            # GitHub webhook with retry logic
 ├── app/                       # Frontend
 │   └── streamlit_app.py      # Interactive demo UI
-├── tests/                     # Test suite
+├── tests/                     # Test suite (148 tests)
 │   ├── test_agents.py        # Agent tests
 │   ├── test_api.py           # API endpoint tests
-│   └── test_code_analyzer.py # Analyzer tests
+│   ├── test_code_analyzer.py # Analyzer tests
+│   ├── test_owasp.py         # OWASP agent tests
+│   └── test_rules_loader.py  # YAML rules tests
 ├── main.py                   # FastAPI application
 ├── requirements.txt          # Dependencies
 ├── Dockerfile                # Docker image
@@ -320,16 +331,106 @@ docker-compose up
 
 ## Supported Languages
 
-- Python
-- JavaScript / TypeScript
-- Java
-- Go
-- Rust
-- C / C++
-- Ruby
-- PHP
-- Swift
-- Kotlin
+| Language | Features |
+|----------|----------|
+| Python | Functions, classes, imports, security patterns |
+| JavaScript | Functions, classes, imports, XSS/eval detection |
+| TypeScript | Functions, classes, interfaces, enums, type safety |
+| Java | Functions, classes, interfaces, enums, security patterns |
+| Go | Functions, interfaces, structs, security patterns |
+| Rust | Functions, structs, enums, unsafe block detection |
+| C / C++ | Basic analysis |
+| Ruby | Basic analysis |
+| PHP | Basic analysis |
+| Swift | Basic analysis |
+| Kotlin | Basic analysis |
+
+## OWASP Top 10 Support
+
+The OWASP agent provides comprehensive vulnerability detection based on the [OWASP Top 10 (2021)](https://owasp.org/www-project-top-ten/):
+
+| Category | Description |
+|----------|-------------|
+| A01:2021 | Broken Access Control |
+| A02:2021 | Cryptographic Failures |
+| A03:2021 | Injection (SQL, Command, XSS) |
+| A04:2021 | Insecure Design |
+| A05:2021 | Security Misconfiguration |
+| A06:2021 | Vulnerable Components |
+| A07:2021 | Auth/Session Failures |
+| A08:2021 | Data Integrity Failures |
+| A09:2021 | Logging/Monitoring Failures |
+| A10:2021 | SSRF |
+
+### Static Analysis
+
+OWASP static analyzer provides pattern-based detection without LLM:
+
+```python
+from agents import OWASPStaticAnalyzer
+
+analyzer = OWASPStaticAnalyzer("python")
+result = analyzer.analyze(code)
+# Returns findings with OWASP category, CWE ID, severity
+```
+
+## Custom YAML Rules
+
+Define your own code review rules in YAML format:
+
+```yaml
+# rules/my-rules.yaml
+name: my-custom-rules
+version: "1.0.0"
+description: My organization's rules
+
+rules:
+  - id: CUSTOM-001
+    name: AWS Key Detection
+    pattern: 'AKIA[0-9A-Z]{16}'
+    severity: critical
+    languages: [all]
+    owasp_id: "A02:2021"
+    cwe_id: "CWE-798"
+    recommendation: Use environment variables
+
+  - id: CUSTOM-002
+    name: Debug Print
+    pattern: 'print\s*\('
+    severity: info
+    languages: [python]
+    category: code-quality
+```
+
+### Using Custom Rules
+
+```python
+from tools import RulesLoader, CustomRulesAnalyzer
+
+# Load rules
+loader = RulesLoader()
+ruleset = loader.load_from_file("rules/my-rules.yaml")
+
+# Analyze code
+analyzer = CustomRulesAnalyzer([ruleset])
+result = analyzer.analyze(code, "python")
+```
+
+### Rule Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique rule identifier |
+| `name` | string | Yes | Human-readable name |
+| `pattern` | regex | Yes | Detection pattern |
+| `severity` | enum | Yes | critical/high/medium/low/info |
+| `languages` | list | No | Target languages (default: all) |
+| `category` | string | No | Rule category |
+| `owasp_id` | string | No | OWASP category (e.g., "A03:2021") |
+| `cwe_id` | string | No | CWE identifier (e.g., "CWE-89") |
+| `recommendation` | string | No | Fix suggestion |
+| `enabled` | bool | No | Enable/disable (default: true) |
+| `tags` | list | No | Searchable tags |
 
 ## License
 

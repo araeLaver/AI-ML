@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .security_agent import SecurityAgent
 from .performance_agent import PerformanceAgent
 from .style_agent import StyleAgent
+from .owasp_agent import OWASPAgent, OWASPStaticAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -52,18 +53,32 @@ def parse_json_safely(content: str, agent_name: str = "Agent") -> dict:
 class ReviewOrchestrator:
     """Orchestrates multiple agents to produce comprehensive code review with parallel execution."""
 
-    def __init__(self, llm: BaseChatModel, timeout: float = 60.0):
+    def __init__(
+        self,
+        llm: BaseChatModel,
+        timeout: float = 60.0,
+        enable_owasp: bool = False,
+        enable_owasp_static: bool = True,
+    ):
         """Initialize orchestrator.
 
         Args:
             llm: Language model to use
             timeout: Timeout for each agent in seconds
+            enable_owasp: Enable OWASP Top 10 LLM agent (slower but more thorough)
+            enable_owasp_static: Enable OWASP static pattern analysis (fast, no LLM)
         """
         self.llm = llm
         self.timeout = timeout
+        self.enable_owasp = enable_owasp
+        self.enable_owasp_static = enable_owasp_static
+
         self.security_agent = SecurityAgent(llm)
         self.performance_agent = PerformanceAgent(llm)
         self.style_agent = StyleAgent(llm)
+
+        # OWASP agents (optional)
+        self.owasp_agent = OWASPAgent(llm) if enable_owasp else None
 
     def review(self, code: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run all agents and synthesize results with parallel execution.
@@ -98,6 +113,8 @@ class ReviewOrchestrator:
                     "summary": parsed.get("summary", ""),
                     "metrics": parsed.get("metrics", {}),
                     "complexity_analysis": parsed.get("complexity_analysis", {}),
+                    "categories_checked": parsed.get("categories_checked", []),
+                    "risk_score": parsed.get("risk_score"),
                     "raw": result.get("analysis") if parsed.get("parse_error") else None
                 }
             except Exception as e:
@@ -110,12 +127,19 @@ class ReviewOrchestrator:
                     "summary": f"Analysis failed: {e}"
                 }
 
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        # Determine number of workers based on enabled agents
+        num_agents = 3 + (1 if self.owasp_agent else 0)
+
+        with ThreadPoolExecutor(max_workers=num_agents) as executor:
             futures = [
                 executor.submit(run_agent, self.security_agent, "security"),
                 executor.submit(run_agent, self.performance_agent, "performance"),
                 executor.submit(run_agent, self.style_agent, "style")
             ]
+
+            # Add OWASP agent if enabled
+            if self.owasp_agent:
+                futures.append(executor.submit(run_agent, self.owasp_agent, "owasp"))
 
             for future in futures:
                 try:
@@ -130,15 +154,29 @@ class ReviewOrchestrator:
                     logger.error(f"Agent execution failed: {e}")
                     errors.append(str(e))
 
+        # OWASP static analysis (fast, no LLM)
+        owasp_static_result = None
+        if self.enable_owasp_static and context:
+            language = context.get("language", "python")
+            try:
+                static_analyzer = OWASPStaticAnalyzer(language)
+                owasp_static_result = static_analyzer.analyze(code)
+            except Exception as e:
+                logger.warning(f"OWASP static analysis failed: {e}")
+
         # Ensure all results exist
         security_result = results.get("security", {"findings": [], "summary": "Not available"})
         performance_result = results.get("performance", {"findings": [], "summary": "Not available"})
         style_result = results.get("style", {"findings": [], "summary": "Not available"})
+        owasp_result = results.get("owasp", None)
 
         # Synthesize results
-        synthesis = self._synthesize_results(security_result, performance_result, style_result)
+        synthesis = self._synthesize_results(
+            security_result, performance_result, style_result,
+            owasp_result, owasp_static_result
+        )
 
-        return {
+        result = {
             "security": security_result,
             "performance": performance_result,
             "style": style_result,
@@ -146,6 +184,14 @@ class ReviewOrchestrator:
             "context": context,
             "errors": errors if errors else None
         }
+
+        # Add OWASP results if available
+        if owasp_result:
+            result["owasp"] = owasp_result
+        if owasp_static_result:
+            result["owasp_static"] = owasp_static_result
+
+        return result
 
     def _review_sequential(self, code: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run all agents sequentially (fallback)."""
@@ -201,10 +247,42 @@ class ReviewOrchestrator:
             errors.append(f"style: {e}")
             style_result = {"findings": [], "summary": f"Failed: {e}", "error": str(e)}
 
-        # Synthesize results
-        synthesis = self._synthesize_results(security_result, performance_result, style_result)
+        # OWASP (optional)
+        owasp_result = None
+        if self.owasp_agent:
+            try:
+                owasp_raw = self.owasp_agent.analyze(code, context)
+                owasp_parsed = parse_json_safely(owasp_raw.get("analysis", ""), "owasp")
+                owasp_result = {
+                    "agent": owasp_raw.get("agent"),
+                    "type": owasp_raw.get("type"),
+                    "findings": owasp_parsed.get("findings", []),
+                    "summary": owasp_parsed.get("summary", ""),
+                    "categories_checked": owasp_parsed.get("categories_checked", []),
+                    "risk_score": owasp_parsed.get("risk_score"),
+                    "raw": owasp_raw.get("analysis") if owasp_parsed.get("parse_error") else None
+                }
+            except Exception as e:
+                logger.error(f"OWASP analysis failed: {e}")
+                errors.append(f"owasp: {e}")
 
-        return {
+        # OWASP static analysis
+        owasp_static_result = None
+        if self.enable_owasp_static and context:
+            language = context.get("language", "python")
+            try:
+                static_analyzer = OWASPStaticAnalyzer(language)
+                owasp_static_result = static_analyzer.analyze(code)
+            except Exception as e:
+                logger.warning(f"OWASP static analysis failed: {e}")
+
+        # Synthesize results
+        synthesis = self._synthesize_results(
+            security_result, performance_result, style_result,
+            owasp_result, owasp_static_result
+        )
+
+        result = {
             "security": security_result,
             "performance": performance_result,
             "style": style_result,
@@ -212,6 +290,13 @@ class ReviewOrchestrator:
             "context": context,
             "errors": errors if errors else None
         }
+
+        if owasp_result:
+            result["owasp"] = owasp_result
+        if owasp_static_result:
+            result["owasp_static"] = owasp_static_result
+
+        return result
 
     async def review_async(self, code: str, context: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run all agents asynchronously with true parallel execution.
@@ -238,6 +323,8 @@ class ReviewOrchestrator:
                     "summary": parsed.get("summary", ""),
                     "metrics": parsed.get("metrics", {}),
                     "complexity_analysis": parsed.get("complexity_analysis", {}),
+                    "categories_checked": parsed.get("categories_checked", []),
+                    "risk_score": parsed.get("risk_score"),
                     "raw": result.get("analysis") if parsed.get("parse_error") else None
                 }
             except asyncio.TimeoutError:
@@ -247,13 +334,19 @@ class ReviewOrchestrator:
                 logger.error(f"{name} failed: {e}")
                 return name, {"agent": name, "error": str(e), "findings": [], "summary": f"Failed: {e}"}
 
-        # Run all agents in parallel
-        results = await asyncio.gather(
+        # Build agent tasks
+        agent_tasks = [
             run_agent(self.security_agent, "security"),
             run_agent(self.performance_agent, "performance"),
             run_agent(self.style_agent, "style"),
-            return_exceptions=True
-        )
+        ]
+
+        # Add OWASP agent if enabled
+        if self.owasp_agent:
+            agent_tasks.append(run_agent(self.owasp_agent, "owasp"))
+
+        # Run all agents in parallel
+        results = await asyncio.gather(*agent_tasks, return_exceptions=True)
 
         # Process results
         result_dict = {}
@@ -267,14 +360,28 @@ class ReviewOrchestrator:
                 if data.get("error"):
                     errors.append(f"{name}: {data['error']}")
 
+        # OWASP static analysis
+        owasp_static_result = None
+        if self.enable_owasp_static and context:
+            language = context.get("language", "python")
+            try:
+                static_analyzer = OWASPStaticAnalyzer(language)
+                owasp_static_result = static_analyzer.analyze(code)
+            except Exception as e:
+                logger.warning(f"OWASP static analysis failed: {e}")
+
         security_result = result_dict.get("security", {"findings": [], "summary": "Not available"})
         performance_result = result_dict.get("performance", {"findings": [], "summary": "Not available"})
         style_result = result_dict.get("style", {"findings": [], "summary": "Not available"})
+        owasp_result = result_dict.get("owasp", None)
 
         # Synthesize results
-        synthesis = self._synthesize_results(security_result, performance_result, style_result)
+        synthesis = self._synthesize_results(
+            security_result, performance_result, style_result,
+            owasp_result, owasp_static_result
+        )
 
-        return {
+        result = {
             "security": security_result,
             "performance": performance_result,
             "style": style_result,
@@ -283,11 +390,20 @@ class ReviewOrchestrator:
             "errors": errors if errors else None
         }
 
+        if owasp_result:
+            result["owasp"] = owasp_result
+        if owasp_static_result:
+            result["owasp_static"] = owasp_static_result
+
+        return result
+
     def _synthesize_results(
         self,
         security: dict[str, Any],
         performance: dict[str, Any],
-        style: dict[str, Any]
+        style: dict[str, Any],
+        owasp: dict[str, Any] | None = None,
+        owasp_static: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Synthesize all agent results into a final summary."""
         # Count issues by severity
@@ -299,11 +415,37 @@ class ReviewOrchestrator:
         medium_count += sum(1 for f in performance.get("findings", []) if f.get("impact", "").upper() == "MEDIUM")
         medium_count += sum(1 for f in style.get("findings", []) if f.get("priority", "").upper() == "MEDIUM")
 
+        # Count OWASP findings
+        owasp_findings = []
+        if owasp:
+            owasp_findings.extend(owasp.get("findings", []))
+            critical_count += sum(1 for f in owasp.get("findings", []) if f.get("severity", "").upper() == "CRITICAL")
+            high_count += sum(1 for f in owasp.get("findings", []) if f.get("severity", "").upper() == "HIGH")
+            medium_count += sum(1 for f in owasp.get("findings", []) if f.get("severity", "").upper() == "MEDIUM")
+
+        if owasp_static:
+            owasp_findings.extend(owasp_static.get("findings", []))
+            high_count += sum(1 for f in owasp_static.get("findings", []) if f.get("severity", "").upper() == "HIGH")
+            medium_count += sum(1 for f in owasp_static.get("findings", []) if f.get("severity", "").upper() == "MEDIUM")
+
         total_findings = (
             len(security.get("findings", [])) +
             len(performance.get("findings", [])) +
-            len(style.get("findings", []))
+            len(style.get("findings", [])) +
+            len(owasp_findings)
         )
+
+        # Build OWASP section if available
+        owasp_section = ""
+        if owasp or owasp_static:
+            owasp_section = "\n## OWASP Top 10 Analysis\n"
+            if owasp:
+                owasp_section += f"LLM Analysis Summary: {owasp.get('summary', 'No analysis')}\n"
+                owasp_section += f"OWASP Findings: {len(owasp.get('findings', []))} issues\n"
+                if owasp.get('risk_score'):
+                    owasp_section += f"Risk Score: {owasp.get('risk_score')}/10\n"
+            if owasp_static:
+                owasp_section += f"Static Analysis: {owasp_static.get('total_issues', 0)} pattern matches\n"
 
         synthesis_prompt = f"""You are a senior code reviewer synthesizing analysis from multiple experts.
 
@@ -318,7 +460,7 @@ Findings: {len(performance.get('findings', []))} issues
 ## Style Analysis
 Summary: {style.get('summary', 'No analysis')}
 Findings: {len(style.get('findings', []))} issues
-
+{owasp_section}
 ## Issue Summary
 - Critical: {critical_count}
 - High: {high_count}

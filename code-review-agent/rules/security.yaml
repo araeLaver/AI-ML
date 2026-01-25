@@ -1,0 +1,210 @@
+# Security Rules for Code Review
+# These rules detect common security vulnerabilities
+
+name: security-rules
+version: "1.0.0"
+description: Security-focused code review rules based on OWASP and CWE standards
+
+metadata:
+  author: Code Review Agent
+  category: security
+  last_updated: "2024-01-01"
+
+rules:
+  # ============================================================================
+  # A01:2021 - Broken Access Control
+  # ============================================================================
+  - id: SEC-A01-001
+    name: Hardcoded Admin Check
+    description: Detects hardcoded admin role checks that may be bypassed
+    pattern: "role\\s*[=!]=\\s*['\"]admin['\"]"
+    severity: medium
+    languages: [all]
+    category: access-control
+    owasp_id: "A01:2021"
+    cwe_id: "CWE-863"
+    recommendation: Use a centralized authorization service instead of hardcoded role checks
+    tags: [access-control, authorization]
+
+  # ============================================================================
+  # A02:2021 - Cryptographic Failures
+  # ============================================================================
+  - id: SEC-A02-001
+    name: Weak MD5 Hash
+    description: Detects usage of MD5 which is cryptographically weak
+    pattern: "md5\\s*\\(|MD5\\s*\\(|hashlib\\.md5|MessageDigest\\.getInstance\\([\"']MD5"
+    severity: critical
+    languages: [all]
+    category: cryptography
+    owasp_id: "A02:2021"
+    cwe_id: "CWE-328"
+    recommendation: Use SHA-256 or stronger hash algorithms
+    tags: [crypto, hash]
+
+  - id: SEC-A02-002
+    name: Weak SHA1 Hash
+    description: Detects usage of SHA1 which is cryptographically weak
+    pattern: "sha1\\s*\\(|SHA1\\s*\\(|hashlib\\.sha1|MessageDigest\\.getInstance\\([\"']SHA-?1"
+    severity: high
+    languages: [all]
+    category: cryptography
+    owasp_id: "A02:2021"
+    cwe_id: "CWE-328"
+    recommendation: Use SHA-256 or stronger hash algorithms
+    tags: [crypto, hash]
+
+  - id: SEC-A02-003
+    name: Hardcoded Secret
+    description: Detects hardcoded secrets, passwords, and API keys
+    pattern: "(password|secret|api_key|apikey|api-key|token|auth)\\s*[=:]\\s*['\"][^'\"]{8,}['\"]"
+    severity: critical
+    languages: [all]
+    category: secrets
+    owasp_id: "A02:2021"
+    cwe_id: "CWE-798"
+    recommendation: Use environment variables or a secrets management service
+    tags: [secrets, credentials]
+
+  - id: SEC-A02-004
+    name: AWS Access Key
+    description: Detects hardcoded AWS access keys
+    pattern: "AKIA[0-9A-Z]{16}"
+    severity: critical
+    languages: [all]
+    category: secrets
+    owasp_id: "A02:2021"
+    cwe_id: "CWE-798"
+    recommendation: Use IAM roles or AWS Secrets Manager instead of hardcoded keys
+    tags: [aws, secrets, credentials]
+
+  # ============================================================================
+  # A03:2021 - Injection
+  # ============================================================================
+  - id: SEC-A03-001
+    name: SQL Injection Risk (Python)
+    description: Detects potential SQL injection via string formatting
+    pattern: "execute\\s*\\([^)]*[%+]|cursor\\.[^)]*\\s*%\\s*\\("
+    severity: critical
+    languages: [python]
+    category: injection
+    owasp_id: "A03:2021"
+    cwe_id: "CWE-89"
+    recommendation: Use parameterized queries with placeholders
+    tags: [sql, injection]
+
+  - id: SEC-A03-002
+    name: Command Injection Risk (Python)
+    description: Detects potential command injection via os.system or subprocess
+    pattern: "os\\.system\\s*\\([^)]*[+%]|subprocess\\.(?:call|run|Popen)\\s*\\([^)]*shell\\s*=\\s*True"
+    severity: critical
+    languages: [python]
+    category: injection
+    owasp_id: "A03:2021"
+    cwe_id: "CWE-78"
+    recommendation: Use subprocess with shell=False and pass arguments as a list
+    tags: [command, injection, os]
+
+  - id: SEC-A03-003
+    name: Eval Usage
+    description: Detects dangerous eval() usage
+    pattern: "\\beval\\s*\\("
+    severity: critical
+    languages: [python, javascript]
+    category: injection
+    owasp_id: "A03:2021"
+    cwe_id: "CWE-94"
+    recommendation: Avoid eval(). Use ast.literal_eval() for Python or JSON.parse() for JavaScript
+    tags: [eval, injection]
+
+  # ============================================================================
+  # A05:2021 - Security Misconfiguration
+  # ============================================================================
+  - id: SEC-A05-001
+    name: Debug Mode Enabled
+    description: Detects debug mode being enabled in code
+    pattern: "DEBUG\\s*=\\s*True|debug\\s*[=:]\\s*true|app\\.run\\([^)]*debug\\s*=\\s*True"
+    severity: high
+    languages: [python, javascript]
+    category: configuration
+    owasp_id: "A05:2021"
+    cwe_id: "CWE-489"
+    recommendation: Ensure debug mode is disabled in production
+    tags: [debug, config]
+
+  - id: SEC-A05-002
+    name: CORS Allow All
+    description: Detects overly permissive CORS configuration
+    pattern: "Access-Control-Allow-Origin[\"']\\s*:\\s*[\"']\\*|cors\\([^)]*origin\\s*[=:]\\s*[\"']\\*"
+    severity: medium
+    languages: [all]
+    category: configuration
+    owasp_id: "A05:2021"
+    cwe_id: "CWE-942"
+    recommendation: Configure CORS to allow only specific trusted origins
+    tags: [cors, config]
+
+  - id: SEC-A05-003
+    name: TLS Verification Disabled
+    description: Detects disabled TLS/SSL certificate verification
+    pattern: "verify\\s*=\\s*False|InsecureSkipVerify\\s*[=:]\\s*true|SSL_VERIFY_NONE"
+    severity: critical
+    languages: [all]
+    category: configuration
+    owasp_id: "A05:2021"
+    cwe_id: "CWE-295"
+    recommendation: Always verify TLS certificates in production
+    tags: [tls, ssl, config]
+
+  # ============================================================================
+  # A07:2021 - Cross-Site Scripting (XSS)
+  # ============================================================================
+  - id: SEC-A07-001
+    name: innerHTML Assignment
+    description: Detects direct innerHTML assignment which may cause XSS
+    pattern: "\\.innerHTML\\s*="
+    severity: high
+    languages: [javascript, typescript]
+    category: xss
+    owasp_id: "A07:2021"
+    cwe_id: "CWE-79"
+    recommendation: Use textContent or sanitize input before using innerHTML
+    tags: [xss, dom]
+
+  - id: SEC-A07-002
+    name: document.write Usage
+    description: Detects document.write which may cause XSS
+    pattern: "document\\.write\\s*\\("
+    severity: medium
+    languages: [javascript, typescript]
+    category: xss
+    owasp_id: "A07:2021"
+    cwe_id: "CWE-79"
+    recommendation: Use modern DOM manipulation methods instead
+    tags: [xss, dom]
+
+  # ============================================================================
+  # A08:2021 - Software and Data Integrity Failures
+  # ============================================================================
+  - id: SEC-A08-001
+    name: Insecure Deserialization (Python)
+    description: Detects insecure pickle usage
+    pattern: "pickle\\.(?:load|loads)\\s*\\("
+    severity: critical
+    languages: [python]
+    category: deserialization
+    owasp_id: "A08:2021"
+    cwe_id: "CWE-502"
+    recommendation: Use JSON or other safe serialization formats
+    tags: [pickle, deserialization]
+
+  - id: SEC-A08-002
+    name: Insecure YAML Loading
+    description: Detects unsafe yaml.load without Loader
+    pattern: "yaml\\.load\\s*\\([^)]*\\)(?!.*Loader)"
+    severity: high
+    languages: [python]
+    category: deserialization
+    owasp_id: "A08:2021"
+    cwe_id: "CWE-502"
+    recommendation: Use yaml.safe_load() or specify a safe Loader
+    tags: [yaml, deserialization]
