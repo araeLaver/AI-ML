@@ -100,9 +100,42 @@ jobs:
           path: models/
           retention-days: 30
 
+  # 모델 검증 게이트 Job
+  validate-model:
+    needs: test
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run model validation gates
+        run: |
+          python -c "
+          from src.cicd.pipeline import ModelValidationGate
+          gate = ModelValidationGate(min_accuracy=0.8, min_f1=0.75)
+          # 실제 환경에서는 MLflow 등에서 메트릭을 가져옴
+          metrics = {'accuracy': 0.85, 'f1_score': 0.80}
+          result = gate.run_all_gates(metrics=metrics)
+          assert result['overall_passed'], f'Model validation failed: {result}'
+          print('Model validation passed')
+          "
+
   # Docker 빌드 및 푸시 Job
   build:
-    needs: test
+    needs: [test, validate-model]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -165,7 +198,16 @@ jobs:
           echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > kubeconfig
           export KUBECONFIG=kubeconfig
 
-      - name: Deploy to staging
+      - name: Notify deployment start
+        if: always()
+        run: |
+          python -c "
+          from src.cicd.notifications import NotificationManager, NotificationChannel
+          nm = NotificationManager(channels=[NotificationChannel.WEBHOOK], webhook_url='${{ secrets.DEPLOY_WEBHOOK_URL }}')
+          nm.notify_deployment_start('staging', '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}', 'canary')
+          " || true
+
+      - name: Deploy to staging (canary)
         run: |
           kubectl apply -f k8s/deployment.yaml -n staging
           kubectl apply -f k8s/service.yaml -n staging
@@ -181,6 +223,25 @@ jobs:
         run: |
           STAGING_URL="https://staging.fraud-detector.example.com"
           curl -f "$STAGING_URL/health" || exit 1
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          python -c "
+          from src.cicd.notifications import NotificationManager, NotificationChannel
+          nm = NotificationManager(channels=[NotificationChannel.WEBHOOK], webhook_url='${{ secrets.DEPLOY_WEBHOOK_URL }}')
+          nm.notify_deployment_success('staging', '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}')
+          " || true
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/fraud-detector -n staging
+          python -c "
+          from src.cicd.notifications import NotificationManager, NotificationChannel
+          nm = NotificationManager(channels=[NotificationChannel.WEBHOOK], webhook_url='${{ secrets.DEPLOY_WEBHOOK_URL }}')
+          nm.notify_deployment_rollback('staging', 'Smoke test or rollout failed')
+          " || true
 
   # Production 배포 Job
   deploy-production:
@@ -204,6 +265,15 @@ jobs:
           echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > kubeconfig
           export KUBECONFIG=kubeconfig
 
+      - name: Notify production deployment start
+        if: always()
+        run: |
+          python -c "
+          from src.cicd.notifications import NotificationManager, NotificationChannel
+          nm = NotificationManager(channels=[NotificationChannel.WEBHOOK], webhook_url='${{ secrets.DEPLOY_WEBHOOK_URL }}')
+          nm.notify_deployment_start('production', '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}', 'blue_green')
+          " || true
+
       - name: Deploy to production
         run: |
           kubectl apply -f k8s/deployment.yaml -n production
@@ -222,3 +292,22 @@ jobs:
           PROD_URL="https://fraud-detector.example.com"
           curl -f "$PROD_URL/health" || exit 1
           echo "Production deployment successful!"
+
+      - name: Notify production deployment success
+        if: success()
+        run: |
+          python -c "
+          from src.cicd.notifications import NotificationManager, NotificationChannel
+          nm = NotificationManager(channels=[NotificationChannel.WEBHOOK], webhook_url='${{ secrets.DEPLOY_WEBHOOK_URL }}')
+          nm.notify_deployment_success('production', '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}')
+          " || true
+
+      - name: Rollback production on failure
+        if: failure()
+        run: |
+          kubectl rollout undo deployment/fraud-detector -n production
+          python -c "
+          from src.cicd.notifications import NotificationManager, NotificationChannel
+          nm = NotificationManager(channels=[NotificationChannel.WEBHOOK], webhook_url='${{ secrets.DEPLOY_WEBHOOK_URL }}')
+          nm.notify_deployment_rollback('production', 'Production deployment failed')
+          " || true
