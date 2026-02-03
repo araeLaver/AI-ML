@@ -19,6 +19,17 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     google_api_key: str = ""
+    dart_api_key: str = ""
+
+    # DART Sync 설정
+    sync_enabled: bool = True
+    sync_interval_hours: int = 1
+    sync_daily_time: str = "09:00"
+    sync_max_disclosures: int = 100
+    sync_lookback_days: int = 1
+
+    # WebSocket 설정
+    ws_heartbeat_interval: int = 30
 
     # Application
     app_env: str = "development"

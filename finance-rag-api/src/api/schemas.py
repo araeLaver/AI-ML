@@ -180,3 +180,99 @@ class StatsResponse(BaseModel):
     llm_model: str = Field(..., description="LLM 모델")
     top_k: int = Field(..., description="기본 검색 문서 수")
     temperature: float = Field(..., description="LLM temperature")
+
+
+# ============================================================
+# 실시간 동기화 API 스키마
+# ============================================================
+
+class SyncStatusResponse(BaseModel):
+    """동기화 상태 응답"""
+    running: bool = Field(..., description="스케줄러 실행 여부")
+    status: str = Field(..., description="현재 상태 (idle, running, success, failed, scheduled)")
+    last_sync: Optional[str] = Field(None, description="마지막 동기화 시간 (ISO 8601)")
+    last_success: Optional[str] = Field(None, description="마지막 성공 시간 (ISO 8601)")
+    config: Dict[str, Any] = Field(..., description="동기화 설정")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "running": True,
+                "status": "scheduled",
+                "last_sync": "2024-01-15T09:00:00",
+                "last_success": "2024-01-15T09:00:00",
+                "config": {
+                    "interval_hours": 1,
+                    "daily_time": "09:00",
+                    "report_types": ["A", "B", "I"],
+                    "lookback_days": 1
+                }
+            }
+        }
+    )
+
+
+class SyncResultResponse(BaseModel):
+    """동기화 결과 응답"""
+    status: str = Field(..., description="동기화 상태")
+    started_at: str = Field(..., description="시작 시간")
+    completed_at: Optional[str] = Field(None, description="완료 시간")
+    duration_seconds: float = Field(..., description="소요 시간 (초)")
+    new_disclosures: int = Field(..., description="새로 수집된 공시 수")
+    updated_disclosures: int = Field(..., description="업데이트된 공시 수")
+    errors: List[str] = Field(default_factory=list, description="오류 목록")
+    disclosure_count: int = Field(..., description="처리된 공시 수")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "status": "success",
+                "started_at": "2024-01-15T09:00:00",
+                "completed_at": "2024-01-15T09:00:15",
+                "duration_seconds": 15.5,
+                "new_disclosures": 5,
+                "updated_disclosures": 2,
+                "errors": [],
+                "disclosure_count": 7
+            }
+        }
+    )
+
+
+class SyncHistoryResponse(BaseModel):
+    """동기화 이력 응답"""
+    history: List[Dict[str, Any]] = Field(..., description="동기화 이력 목록")
+    total_count: int = Field(..., description="전체 이력 수")
+
+
+class StreamQueryRequest(BaseModel):
+    """스트리밍 쿼리 요청"""
+    query: str = Field(
+        ...,
+        min_length=2,
+        max_length=500,
+        description="검색 쿼리"
+    )
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="검색할 문서 수"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "query": "삼성전자 실적 분석",
+                "top_k": 5
+            }
+        }
+    )
+
+
+class WebSocketSubscribeRequest(BaseModel):
+    """WebSocket 구독 요청"""
+    action: str = Field(..., description="액션 (subscribe, unsubscribe, ping)")
+    type: Optional[str] = Field(None, description="구독 유형 (company, report_type, all)")
+    filter: Optional[str] = Field(None, description="필터 값 (회사코드, 공시유형)")
+    subscription_id: Optional[str] = Field(None, description="구독 해제 시 구독 ID")

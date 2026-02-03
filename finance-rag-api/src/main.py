@@ -24,6 +24,7 @@ from fastapi.exceptions import RequestValidationError
 from contextlib import asynccontextmanager
 
 from .api.routes import router, get_rag_service
+from .api.realtime_routes import realtime_router
 from .api.middleware import RequestLoggingMiddleware
 from .api.exception_handlers import (
     rag_exception_handler,
@@ -33,6 +34,13 @@ from .api.exception_handlers import (
 from .core.config import get_settings
 from .core.exceptions import RAGException
 from .core.logging import get_logger, setup_logging
+from .realtime import (
+    start_sync_scheduler,
+    stop_sync_scheduler,
+    SyncConfig,
+    get_websocket_manager,
+    broadcast_disclosure,
+)
 
 # 로깅 초기화
 setup_logging()
@@ -85,8 +93,8 @@ async def lifespan(app: FastAPI):
     """
     애플리케이션 생명주기 관리
 
-    시작 시: 샘플 데이터 로드
-    종료 시: 리소스 정리
+    시작 시: 샘플 데이터 로드, 실시간 스케줄러 시작
+    종료 시: 리소스 정리, 스케줄러 종료
     """
     # 시작 시 실행
     logger.info("=" * 50)
@@ -111,16 +119,57 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"기존 데이터 발견: {stats['total_documents']}개 문서")
 
+    # 실시간 동기화 스케줄러 시작
     settings = get_settings()
+    if settings.sync_enabled:
+        logger.info("DART 동기화 스케줄러 시작...")
+        sync_config = SyncConfig(
+            interval_hours=settings.sync_interval_hours,
+            daily_time=settings.sync_daily_time,
+            max_disclosures_per_sync=settings.sync_max_disclosures,
+            lookback_days=settings.sync_lookback_days,
+        )
+        scheduler = start_sync_scheduler(sync_config)
+
+        # 새 공시 발생 시 WebSocket 브로드캐스트 콜백 등록
+        def on_new_disclosure(disclosure):
+            import asyncio
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    asyncio.create_task(broadcast_disclosure({
+                        "rcept_no": getattr(disclosure, "rcept_no", ""),
+                        "corp_name": getattr(disclosure, "corp_name", ""),
+                        "corp_code": getattr(disclosure, "corp_code", ""),
+                        "report_nm": getattr(disclosure, "report_nm", ""),
+                        "rcept_dt": getattr(disclosure, "rcept_dt", ""),
+                    }))
+            except Exception as e:
+                logger.error(f"Failed to broadcast disclosure: {e}")
+
+        scheduler.on_new_disclosure(on_new_disclosure)
+        logger.info(f"동기화 스케줄러 활성화 (주기: {settings.sync_interval_hours}시간)")
+    else:
+        logger.info("DART 동기화 스케줄러 비활성화 (sync_enabled=False)")
+
     logger.info("=" * 50)
     logger.info("API 준비 완료!")
     logger.info(f"Swagger UI: http://localhost:{settings.api_port}/docs")
+    logger.info(f"WebSocket: ws://localhost:{settings.api_port}/api/v1/ws/notifications")
+    logger.info(f"SSE Stream: http://localhost:{settings.api_port}/api/v1/stream/query")
     logger.info("=" * 50)
 
     yield  # 애플리케이션 실행
 
     # 종료 시 실행
     logger.info("서버 종료 중...")
+
+    # 동기화 스케줄러 종료
+    if settings.sync_enabled:
+        logger.info("DART 동기화 스케줄러 종료...")
+        stop_sync_scheduler()
+
+    logger.info("서버 종료 완료")
 
 
 # FastAPI 앱 생성
@@ -148,7 +197,7 @@ LLM과 벡터 검색을 결합한 금융 Q&A 시스템입니다.
 - 신뢰도 점수 제공
 - RESTful API 설계
     """,
-    version="1.0.0",
+    version="2.0.0",
     contact={
         "name": "김다운",
         "email": "your-email@example.com"
@@ -180,6 +229,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 
 # ===== 라우터 등록 =====
 app.include_router(router, prefix="/api/v1", tags=["RAG API"])
+app.include_router(realtime_router, prefix="/api/v1", tags=["Realtime API"])
 
 
 # 루트 엔드포인트
@@ -188,10 +238,15 @@ async def root():
     """루트 엔드포인트 - API 정보 반환"""
     return {
         "name": "Finance RAG API",
-        "version": "1.0.0",
-        "description": "금융 문서 기반 RAG Q&A 시스템",
+        "version": "2.0.0",
+        "description": "금융 문서 기반 RAG Q&A 시스템 (실시간 기능 포함)",
         "docs": "/docs",
-        "health": "/api/v1/health"
+        "health": "/api/v1/health",
+        "realtime": {
+            "websocket": "/api/v1/ws/notifications",
+            "sync_status": "/api/v1/sync/status",
+            "stream_query": "/api/v1/stream/query"
+        }
     }
 
 
