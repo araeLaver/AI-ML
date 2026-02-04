@@ -466,7 +466,7 @@ class TestSecurityRouterIntegration:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["version"] == "2.4.0"
+        assert data["version"] == "2.5.0"
         assert "security" in data
         assert "login" in data["security"]
         assert "api_keys" in data["security"]

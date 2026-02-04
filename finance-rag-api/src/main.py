@@ -202,7 +202,7 @@ LLM과 벡터 검색을 결합한 금융 Q&A 시스템입니다.
 - 신뢰도 점수 제공
 - RESTful API 설계
     """,
-    version="2.4.0",
+    version="2.5.0",
     contact={
         "name": "김다운",
         "email": "your-email@example.com"
@@ -247,7 +247,7 @@ async def root():
     """루트 엔드포인트 - API 정보 반환"""
     return {
         "name": "Finance RAG API",
-        "version": "2.4.0",
+        "version": "2.5.0",
         "description": "금융 문서 기반 RAG Q&A 시스템 (실시간 + 멀티모달 + 성능최적화 + 보안 + 파이프라인)",
         "docs": "/docs",
         "health": "/api/v1/health",

@@ -415,7 +415,7 @@ class TestPipelineRouterIntegration:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["version"] == "2.4.0"
+        assert data["version"] == "2.5.0"
         assert "pipeline" in data
         assert "create" in data["pipeline"]
         assert "run" in data["pipeline"]

@@ -351,7 +351,7 @@ class TestRootEndpoint:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["version"] == "2.4.0"
+        assert data["version"] == "2.5.0"
         assert "realtime" in data
         assert "websocket" in data["realtime"]
         assert "sync_status" in data["realtime"]
