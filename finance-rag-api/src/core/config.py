@@ -31,6 +31,16 @@ class Settings(BaseSettings):
     # WebSocket 설정
     ws_heartbeat_interval: int = 30
 
+    # Cache 설정
+    cache_enabled: bool = True
+    redis_url: str = "redis://localhost:6379/0"
+    cache_default_ttl: int = 3600  # 1시간
+    cache_prefix: str = "finance_rag:"
+
+    # 배치 처리 설정
+    batch_size: int = 100
+    batch_max_concurrent: int = 5
+
     # Application
     app_env: str = "development"
     debug: bool = True

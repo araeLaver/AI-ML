@@ -36,6 +36,9 @@ websockets>=12.0
 # Scheduling
 schedule>=1.2.0
 
+# Caching
+redis>=5.0.0
+
 # Utilities
 python-dotenv>=1.0.0
 pydantic>=2.5.0
