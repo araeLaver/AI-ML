@@ -25,6 +25,7 @@ from contextlib import asynccontextmanager
 
 from .api.routes import router, get_rag_service
 from .api.realtime_routes import realtime_router
+from .api.multimodal_routes import multimodal_router
 from .api.middleware import RequestLoggingMiddleware
 from .api.exception_handlers import (
     rag_exception_handler,
@@ -184,6 +185,7 @@ LLM과 벡터 검색을 결합한 금융 Q&A 시스템입니다.
 - **RAG 질의**: 금융 문서를 검색하여 LLM이 답변 생성
 - **문서 관리**: 금융 문서 추가/조회/삭제
 - **출처 제공**: 답변의 근거 문서 명시
+- **멀티모달**: PDF 표 추출, OCR, 차트 분석
 
 ### 기술 스택
 - **LLM**: Ollama (llama3.2)
@@ -197,7 +199,7 @@ LLM과 벡터 검색을 결합한 금융 Q&A 시스템입니다.
 - 신뢰도 점수 제공
 - RESTful API 설계
     """,
-    version="2.0.0",
+    version="2.1.0",
     contact={
         "name": "김다운",
         "email": "your-email@example.com"
@@ -230,6 +232,7 @@ app.add_exception_handler(Exception, general_exception_handler)
 # ===== 라우터 등록 =====
 app.include_router(router, prefix="/api/v1", tags=["RAG API"])
 app.include_router(realtime_router, prefix="/api/v1", tags=["Realtime API"])
+app.include_router(multimodal_router, prefix="/api/v1/multimodal", tags=["Multimodal API"])
 
 
 # 루트 엔드포인트
@@ -238,14 +241,20 @@ async def root():
     """루트 엔드포인트 - API 정보 반환"""
     return {
         "name": "Finance RAG API",
-        "version": "2.0.0",
-        "description": "금융 문서 기반 RAG Q&A 시스템 (실시간 기능 포함)",
+        "version": "2.1.0",
+        "description": "금융 문서 기반 RAG Q&A 시스템 (실시간 + 멀티모달)",
         "docs": "/docs",
         "health": "/api/v1/health",
         "realtime": {
             "websocket": "/api/v1/ws/notifications",
             "sync_status": "/api/v1/sync/status",
             "stream_query": "/api/v1/stream/query"
+        },
+        "multimodal": {
+            "extract_tables": "/api/v1/multimodal/extract-tables",
+            "ocr": "/api/v1/multimodal/ocr/image",
+            "chart_analysis": "/api/v1/multimodal/analyze-chart",
+            "stats": "/api/v1/multimodal/stats"
         }
     }
 
