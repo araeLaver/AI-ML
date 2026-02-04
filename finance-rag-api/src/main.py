@@ -27,6 +27,7 @@ from .api.routes import router, get_rag_service
 from .api.realtime_routes import realtime_router
 from .api.multimodal_routes import multimodal_router
 from .api.performance_routes import performance_router
+from .api.security_routes import security_router
 from .api.middleware import RequestLoggingMiddleware
 from .api.exception_handlers import (
     rag_exception_handler,
@@ -200,7 +201,7 @@ LLM과 벡터 검색을 결합한 금융 Q&A 시스템입니다.
 - 신뢰도 점수 제공
 - RESTful API 설계
     """,
-    version="2.2.0",
+    version="2.3.0",
     contact={
         "name": "김다운",
         "email": "your-email@example.com"
@@ -235,6 +236,7 @@ app.include_router(router, prefix="/api/v1", tags=["RAG API"])
 app.include_router(realtime_router, prefix="/api/v1", tags=["Realtime API"])
 app.include_router(multimodal_router, prefix="/api/v1/multimodal", tags=["Multimodal API"])
 app.include_router(performance_router, prefix="/api/v1/performance", tags=["Performance API"])
+app.include_router(security_router, prefix="/api/v1/security", tags=["Security API"])
 
 
 # 루트 엔드포인트
@@ -243,8 +245,8 @@ async def root():
     """루트 엔드포인트 - API 정보 반환"""
     return {
         "name": "Finance RAG API",
-        "version": "2.2.0",
-        "description": "금융 문서 기반 RAG Q&A 시스템 (실시간 + 멀티모달 + 성능최적화)",
+        "version": "2.3.0",
+        "description": "금융 문서 기반 RAG Q&A 시스템 (실시간 + 멀티모달 + 성능최적화 + 보안)",
         "docs": "/docs",
         "health": "/api/v1/health",
         "realtime": {
@@ -262,6 +264,12 @@ async def root():
             "cache_stats": "/api/v1/performance/cache/stats",
             "metrics": "/api/v1/performance/metrics",
             "batch_process": "/api/v1/performance/batch/process"
+        },
+        "security": {
+            "login": "/api/v1/security/auth/login",
+            "api_keys": "/api/v1/security/api-keys",
+            "audit_logs": "/api/v1/security/audit/logs",
+            "health": "/api/v1/security/health"
         }
     }
 

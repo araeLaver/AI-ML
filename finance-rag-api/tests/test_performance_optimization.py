@@ -427,7 +427,7 @@ class TestRouterIntegration:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["version"] == "2.2.0"
+        assert data["version"] == "2.3.0"
         assert "performance" in data
         assert "cache_stats" in data["performance"]
 
