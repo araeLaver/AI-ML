@@ -1,0 +1,73 @@
+# Hyperparameter Tuning Configuration
+# ====================================
+# Ray Tune + Optuna 기반 하이퍼파라미터 자동 탐색 설정
+
+# Base training config to override
+base_config_path: "configs/training_config.yaml"
+
+# Search Space Definition
+# Supported types: uniform, loguniform, choice, randint, quniform
+search_space:
+  learning_rate:
+    type: "loguniform"
+    lower: 1.0e-5
+    upper: 1.0e-3
+
+  num_train_epochs:
+    type: "choice"
+    values: [1, 2, 3, 5]
+
+  per_device_train_batch_size:
+    type: "choice"
+    values: [2, 4, 8]
+
+  gradient_accumulation_steps:
+    type: "choice"
+    values: [2, 4, 8, 16]
+
+  warmup_ratio:
+    type: "uniform"
+    lower: 0.0
+    upper: 0.1
+
+  weight_decay:
+    type: "loguniform"
+    lower: 1.0e-4
+    upper: 0.1
+
+  lora_r:
+    type: "choice"
+    values: [8, 16, 32, 64]
+
+  lora_alpha:
+    type: "choice"
+    values: [16, 32, 64, 128]
+
+  lora_dropout:
+    type: "uniform"
+    lower: 0.0
+    upper: 0.2
+
+# Scheduler Configuration
+scheduler:
+  type: "asha"             # "asha" or "hyperband"
+  max_t: 5                 # Maximum training epochs
+  grace_period: 1          # Minimum epochs before stopping
+  reduction_factor: 3      # Bracket reduction factor
+
+# Search Algorithm
+search_algorithm: "optuna"  # "optuna" or "random"
+
+# Optimization Metric
+metric: "eval_loss"
+mode: "min"                 # "min" or "max"
+
+# Resource Configuration
+resources:
+  num_samples: 10           # Total number of trials
+  gpus_per_trial: 1         # GPUs per trial
+  cpus_per_trial: 4         # CPUs per trial
+  max_concurrent_trials: 1  # Max parallel trials
+
+# Output
+output_dir: "./outputs/tuning_results"

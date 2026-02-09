@@ -38,3 +38,13 @@ try:
     __all__.append("FinancialDPOTrainer")
 except ImportError:
     pass
+
+# Hyperparameter tuning (dataclasses always available)
+from .hyperparameter_tuner import TuningConfig, TuningResult
+__all__.extend(["TuningConfig", "TuningResult"])
+
+try:
+    from .hyperparameter_tuner import HyperparameterTuner, run_hyperparameter_search
+    __all__.extend(["HyperparameterTuner", "run_hyperparameter_search"])
+except ImportError:
+    pass

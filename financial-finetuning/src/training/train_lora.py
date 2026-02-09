@@ -113,6 +113,7 @@ class FinancialLoRATrainer:
         config: Optional[Dict[str, Any]] = None,
         early_stopping_patience: int = 3,
         early_stopping_threshold: float = 0.01,
+        extra_callbacks: Optional[list] = None,
     ):
         """
         Args:
@@ -120,6 +121,7 @@ class FinancialLoRATrainer:
             config: 직접 전달할 설정 딕셔너리
             early_stopping_patience: Early stopping patience (epochs)
             early_stopping_threshold: 개선 임계값
+            extra_callbacks: 추가 콜백 리스트 (예: Ray Tune 리포트 콜백)
         """
         if config is not None:
             self.config = config
@@ -136,6 +138,7 @@ class FinancialLoRATrainer:
         # Early stopping 설정
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_threshold = early_stopping_threshold
+        self.extra_callbacks = extra_callbacks or []
 
         # 학습 상태
         self.training_complete = False
@@ -302,7 +305,7 @@ class FinancialLoRATrainer:
                 early_stopping_patience=self.early_stopping_patience,
                 early_stopping_threshold=self.early_stopping_threshold,
             ),
-        ]
+        ] + list(self.extra_callbacks)
 
         # SFTTrainer 설정
         self.trainer = SFTTrainer(
