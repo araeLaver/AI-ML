@@ -1,0 +1,47 @@
+# vLLM Inference Server Configuration
+# =====================================
+
+# Engine Settings
+engine:
+  # 베이스 모델
+  model: "beomi/Llama-3-Open-Ko-8B"
+  # tokenizer: null  # 모델과 동일하면 생략
+
+  dtype: "auto"  # "auto", "float16", "bfloat16"
+  max_model_len: 2048
+  trust_remote_code: true
+
+  # GPU / 병렬화
+  tensor_parallel_size: 1  # GPU 수에 맞게 조정 (2, 4, 8)
+  gpu_memory_utilization: 0.90  # GPU 메모리 사용률 (0.0 ~ 1.0)
+  swap_space: 4  # CPU 스왑 공간 (GiB)
+
+  # 양자화 (선택)
+  # quantization: "awq"   # AWQ 양자화
+  # quantization: "gptq"  # GPTQ 양자화
+  quantization: null  # 양자화 없음
+
+# LoRA Adapter Settings
+lora:
+  enabled: false
+  adapter_path: "./outputs/lora_adapter"
+  max_loras: 1
+  max_lora_rank: 64
+
+# Generation Defaults
+generation:
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  max_tokens: 512
+  repetition_penalty: 1.1
+
+# Serving Settings
+serving:
+  max_num_seqs: 256  # 최대 동시 시퀀스 수
+  # max_num_batched_tokens: null  # null이면 자동 설정
+
+# Benchmark Settings
+benchmark:
+  num_requests: 10
+  output_dir: "./outputs/benchmark_results"

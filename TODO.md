@@ -8,13 +8,13 @@ AI/ML 포트폴리오 신규 기능 구현 목록입니다.
 
 ### Phase 5 완료: Fine-tuning 강화
 
-- [ ] **Ray Tune 하이퍼파라미터 최적화**
+- [x] **Ray Tune 하이퍼파라미터 최적화**
   - 프로젝트: `financial-finetuning`
   - 설명: 분산 하이퍼파라미터 튜닝 자동화
   - 기술: Ray Tune, Optuna 통합
   - 예상 파일: `src/training/hyperparameter_tuner.py`
 
-- [ ] **vLLM 추론 최적화**
+- [x] **vLLM 추론 최적화**
   - 프로젝트: `financial-finetuning`
   - 설명: 고속 LLM 추론 서버 구축
   - 기술: vLLM, PagedAttention
@@ -154,19 +154,19 @@ AI/ML 포트폴리오 신규 기능 구현 목록입니다.
 
 | 카테고리 | 완료 | 진행중 | 대기 | 총계 |
 |:---|:---:|:---:|:---:|:---:|
-| High Priority | 0 | 0 | 3 | 3 |
+| High Priority | 2 | 0 | 1 | 3 |
 | Medium Priority | 0 | 0 | 5 | 5 |
 | Low Priority | 0 | 0 | 8 | 8 |
-| **Total** | **0** | **0** | **16** | **16** |
+| **Total** | **2** | **0** | **14** | **16** |
 
 ---
 
 ## 다음 단계
 
-1. **Ray Tune 하이퍼파라미터 최적화** 구현 시작
-2. **vLLM 추론 최적화** 구현
+1. ~~**Ray Tune 하이퍼파라미터 최적화** 구현~~ (완료)
+2. ~~**vLLM 추론 최적화** 구현~~ (완료)
 3. **Evidently 드리프트 감지** 구현
 
 ---
 
-*마지막 업데이트: 2026-02-08*
+*마지막 업데이트: 2026-02-11*

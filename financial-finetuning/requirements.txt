@@ -16,7 +16,7 @@ huggingface-hub>=0.20.0
 safetensors>=0.4.0
 
 # Inference Optimization
-# vllm>=0.2.7  # Optional: GPU required
+vllm>=0.2.7  # GPU required: PagedAttention + continuous batching
 llama-cpp-python>=0.2.0  # For GGUF models
 
 # API & Web
